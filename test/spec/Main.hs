@@ -35,16 +35,12 @@ import qualified Feature.Query.AggregateFunctionsSpec
 import qualified Feature.Query.AndOrParamsSpec
 import qualified Feature.Query.ComputedRelsSpec
 import qualified Feature.Query.CustomMediaSpec
-import qualified Feature.Query.DeleteSpec
 import qualified Feature.Query.EmbedDisambiguationSpec
 import qualified Feature.Query.EmbedInnerJoinSpec
 import qualified Feature.Query.ErrorSpec
-import qualified Feature.Query.InsertSpec
 import qualified Feature.Query.JsonOperatorSpec
-import qualified Feature.Query.LimitedMutationSpec
 import qualified Feature.Query.MultipleSchemaSpec
 import qualified Feature.Query.NullsStripSpec
-import qualified Feature.Query.PgSafeUpdateSpec
 import qualified Feature.Query.PlanSpec
 import qualified Feature.Query.PostGISSpec
 import qualified Feature.Query.PreferencesSpec
@@ -57,9 +53,6 @@ import qualified Feature.Query.RpcSpec
 import qualified Feature.Query.ServerTimingSpec
 import qualified Feature.Query.SingularSpec
 import qualified Feature.Query.SpreadQueriesSpec
-import qualified Feature.Query.UnicodeSpec
-import qualified Feature.Query.UpdateSpec
-import qualified Feature.Query.UpsertSpec
 import qualified Feature.RollbackSpec
 import qualified Feature.RpcPreRequestGucsSpec
 
@@ -109,13 +102,11 @@ main = do
       disallowRollbackApp  = app testCfgDisallowRollback
       forceRollbackApp     = app testCfgForceRollback
       planEnabledApp       = app testPlanEnabledCfg
-      pgSafeUpdateApp      = app testPgSafeUpdateEnabledCfg
       obsApp               = app testObservabilityCfg
       serverTiming         = app testCfgServerTiming
       aggregatesEnabled    = app testCfgAggregatesEnabled
 
       extraSearchPathApp   = appDbs testCfgExtraSearchPath
-      unicodeApp           = appDbs testUnicodeCfg
       nonexistentSchemaApp = appDbs testNonexistentSchemaCfg
       multipleSchemaApp    = appDbs testMultipleSchemaCfg
 
@@ -134,14 +125,11 @@ main = do
         , ("Feature.OptionsSpec"                         , Feature.OptionsSpec.spec actualPgVersion)
         , ("Feature.Query.AndOrParamsSpec"               , Feature.Query.AndOrParamsSpec.spec actualPgVersion)
         , ("Feature.Query.ComputedRelsSpec"              , Feature.Query.ComputedRelsSpec.spec)
-        , ("Feature.Query.DeleteSpec"                    , Feature.Query.DeleteSpec.spec)
         , ("Feature.Query.EmbedDisambiguationSpec"       , Feature.Query.EmbedDisambiguationSpec.spec)
         , ("Feature.Query.EmbedInnerJoinSpec"            , Feature.Query.EmbedInnerJoinSpec.spec)
-        , ("Feature.Query.InsertSpec"                    , Feature.Query.InsertSpec.spec actualPgVersion)
         , ("Feature.Query.JsonOperatorSpec"              , Feature.Query.JsonOperatorSpec.spec actualPgVersion)
         , ("Feature.Query.NullsStripSpec"                , Feature.Query.NullsStripSpec.spec)
         , ("Feature.Query.PgErrorCodeMappingSpec"        , Feature.Query.ErrorSpec.pgErrorCodeMapping)
-        , ("Feature.Query.PgSafeUpdateSpec.disabledSpec" , Feature.Query.PgSafeUpdateSpec.disabledSpec)
         , ("Feature.Query.PlanSpec.disabledSpec"         , Feature.Query.PlanSpec.disabledSpec)
         , ("Feature.Query.PreferencesSpec"               , Feature.Query.PreferencesSpec.spec)
         , ("Feature.Query.QuerySpec"                     , Feature.Query.QuerySpec.spec actualPgVersion)
@@ -150,8 +138,6 @@ main = do
         , ("Feature.Query.RpcSpec"                       , Feature.Query.RpcSpec.spec actualPgVersion)
         , ("Feature.Query.SingularSpec"                  , Feature.Query.SingularSpec.spec)
         , ("Feature.Query.SpreadQueriesSpec"             , Feature.Query.SpreadQueriesSpec.spec)
-        , ("Feature.Query.UpdateSpec"                    , Feature.Query.UpdateSpec.spec actualPgVersion)
-        , ("Feature.Query.UpsertSpec"                    , Feature.Query.UpsertSpec.spec actualPgVersion)
         ]
 
   hspec $ do
@@ -164,10 +150,6 @@ main = do
     -- this test runs with a different server flag
     parallel $ before maxRowsApp $
       describe "Feature.Query.QueryLimitedSpec" Feature.Query.QueryLimitedSpec.spec
-
-    -- this test runs with a different schema
-    parallel $ before unicodeApp $
-      describe "Feature.Query.UnicodeSpec" Feature.Query.UnicodeSpec.spec
 
     -- this test runs without an anonymous role
     parallel $ before noAnonApp $
@@ -241,14 +223,6 @@ main = do
     -- this test runs with tx-rollback-all = true and tx-allow-override = false
     before forceRollbackApp $
       describe "Feature.RollbackForcedSpec" Feature.RollbackSpec.forced
-
-    before withApp $
-      describe "Feature.Query.LimitedMutationSpec" Feature.Query.LimitedMutationSpec.spec
-
-    -- This test runs with a pre request to enable the pg-safeupdate library per-session.
-    -- This needs to run last, because once pg safe update is loaded, it can't be unloaded again.
-    before pgSafeUpdateApp $
-      describe "Feature.Query.PgSafeUpdateSpec.spec" Feature.Query.PgSafeUpdateSpec.spec
 
   where
     loadSCache pool conf =

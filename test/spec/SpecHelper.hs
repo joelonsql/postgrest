@@ -241,9 +241,6 @@ testCfgResponseHeaders = baseCfg { configDbPreRequest = Just $ QualifiedIdentifi
 testMultipleSchemaCfg :: AppConfig
 testMultipleSchemaCfg = baseCfg { configDbSchemas = fromList ["v1", "v2", "SPECIAL \"@/\\#~_-"] }
 
-testPgSafeUpdateEnabledCfg :: AppConfig
-testPgSafeUpdateEnabledCfg = baseCfg { configDbPreRequest = Just $ QualifiedIdentifier "test" "load_safeupdate" }
-
 testObservabilityCfg :: AppConfig
 testObservabilityCfg = baseCfg { configServerTraceHeader = Just $ mk "X-Request-Id" }
 

@@ -10,7 +10,6 @@ to produce SqlQuery type outputs.
 -}
 module PostgREST.Query.QueryBuilder
   ( readPlanToQuery
-  , mutatePlanToQuery
   , readPlanToCountQuery
   , callPlanToQuery
   , limitedQuery
@@ -22,7 +21,6 @@ import qualified Hasql.DynamicStatements.Snippet as SQL
 import Data.Maybe (fromJust)
 import Data.Tree  (Tree (..))
 
-import PostgREST.ApiRequest.Preferences   (PreferResolution (..))
 import PostgREST.Config.PgVersion         (PgVersion, pgVersion110,
                                            pgVersion130)
 import PostgREST.SchemaCache.Identifiers  (QualifiedIdentifier (..))
@@ -33,11 +31,9 @@ import PostgREST.SchemaCache.Routine      (RoutineParam (..))
 
 import PostgREST.ApiRequest.Types
 import PostgREST.Plan.CallPlan
-import PostgREST.Plan.MutatePlan
 import PostgREST.Plan.ReadPlan
 import PostgREST.Plan.Types
 import PostgREST.Query.SqlFragment
-import PostgREST.RangeQuery        (allRange)
 
 import Protolude
 
@@ -106,89 +102,6 @@ getJoin fld node@(Node ReadPlan{relJoinType} _) =
           subq = "SELECT json_agg(" <> aggAlias <> ")::jsonb AS " <> aggAlias <> " FROM (" <> subquery <> " ) AS " <> aggAlias
           condition = if relJoinType == Just JTInner then aggAlias <> " IS NOT NULL" else "TRUE"
         in correlatedSubquery subq aggAlias condition
-
-mutatePlanToQuery :: MutatePlan -> SQL.Snippet
-mutatePlanToQuery (Insert mainQi iCols body onConflct putConditions returnings _ applyDefaults) =
-  "INSERT INTO " <> fromQi mainQi <> (if null iCols then " " else "(" <> cols <> ") ") <>
-  fromJsonBodyF body iCols True False applyDefaults <>
-  -- Only used for PUT
-  (if null putConditions then mempty else "WHERE " <> addConfigPgrstInserted True <> " AND " <> intercalateSnippet " AND " (pgFmtLogicTree (QualifiedIdentifier mempty "pgrst_body") <$> putConditions)) <>
-  (if null putConditions && mergeDups then "WHERE " <> addConfigPgrstInserted True else mempty) <>
-  maybe mempty (\(oncDo, oncCols) ->
-    if null oncCols then
-      mempty
-    else
-      " ON CONFLICT(" <> intercalateSnippet ", " (pgFmtIdent <$> oncCols) <> ") " <> case oncDo of
-      IgnoreDuplicates ->
-        "DO NOTHING"
-      MergeDuplicates  ->
-        if null iCols
-           then "DO NOTHING"
-           else "DO UPDATE SET " <> intercalateSnippet ", " ((pgFmtIdent . cfName) <> const " = EXCLUDED." <> (pgFmtIdent . cfName) <$> iCols) <> (if null putConditions && not mergeDups then mempty else "WHERE " <> addConfigPgrstInserted False)
-    ) onConflct <> " " <>
-    returningF mainQi returnings
-  where
-    cols = intercalateSnippet ", " $ pgFmtIdent . cfName <$> iCols
-    mergeDups = case onConflct of {Just (MergeDuplicates,_) -> True; _ -> False;}
-
--- An update without a limit is always filtered with a WHERE
-mutatePlanToQuery (Update mainQi uCols body logicForest range ordts returnings applyDefaults)
-  | null uCols =
-    -- if there are no columns we cannot do UPDATE table SET {empty}, it'd be invalid syntax
-    -- selecting an empty resultset from mainQi gives us the column names to prevent errors when using &select=
-    -- the select has to be based on "returnings" to make computed overloaded functions not throw
-    "SELECT " <> emptyBodyReturnedColumns <> " FROM " <> fromQi mainQi <> " WHERE false"
-
-  | range == allRange =
-    "UPDATE " <> mainTbl <> " SET " <> nonRangeCols <> " " <>
-    fromJsonBodyF body uCols False False applyDefaults <>
-    whereLogic <> " " <>
-    returningF mainQi returnings
-
-  | otherwise =
-    "WITH " <>
-    "pgrst_update_body AS (" <> fromJsonBodyF body uCols True True applyDefaults <> "), " <>
-    "pgrst_affected_rows AS (" <>
-      "SELECT " <> rangeIdF <> " FROM " <> mainTbl <>
-      whereLogic <> " " <>
-      orderF mainQi ordts <> " " <>
-      limitOffsetF range <>
-    ") " <>
-    "UPDATE " <> mainTbl <> " SET " <> rangeCols <>
-    "FROM pgrst_affected_rows " <>
-    "WHERE " <> whereRangeIdF <> " " <>
-    returningF mainQi returnings
-
-  where
-    whereLogic = if null logicForest then mempty else " WHERE " <> intercalateSnippet " AND " (pgFmtLogicTree mainQi <$> logicForest)
-    mainTbl = fromQi mainQi
-    emptyBodyReturnedColumns = if null returnings then "NULL" else intercalateSnippet ", " (pgFmtColumn (QualifiedIdentifier mempty $ qiName mainQi) <$> returnings)
-    nonRangeCols = intercalateSnippet ", " (pgFmtIdent . cfName <> const " = " <> pgFmtColumn (QualifiedIdentifier mempty "pgrst_body") . cfName <$> uCols)
-    rangeCols = intercalateSnippet ", " ((\col -> pgFmtIdent (cfName col) <> " = (SELECT " <> pgFmtIdent (cfName col) <> " FROM pgrst_update_body) ") <$> uCols)
-    (whereRangeIdF, rangeIdF) = mutRangeF mainQi (cfName . coField <$> ordts)
-
-mutatePlanToQuery (Delete mainQi logicForest range ordts returnings)
-  | range == allRange =
-    "DELETE FROM " <> fromQi mainQi <> " " <>
-    whereLogic <> " " <>
-    returningF mainQi returnings
-
-  | otherwise =
-    "WITH " <>
-    "pgrst_affected_rows AS (" <>
-      "SELECT " <> rangeIdF <> " FROM " <> fromQi mainQi <>
-       whereLogic <> " " <>
-      orderF mainQi ordts <> " " <>
-      limitOffsetF range <>
-    ") " <>
-    "DELETE FROM " <> fromQi mainQi <> " " <>
-    "USING pgrst_affected_rows " <>
-    "WHERE " <> whereRangeIdF <> " " <>
-    returningF mainQi returnings
-
-  where
-    whereLogic = if null logicForest then mempty else " WHERE " <> intercalateSnippet " AND " (pgFmtLogicTree mainQi <$> logicForest)
-    (whereRangeIdF, rangeIdF) = mutRangeF mainQi (cfName . coField <$> ordts)
 
 callPlanToQuery :: CallPlan -> PgVersion -> SQL.Snippet
 callPlanToQuery (FunctionCall qi params args returnsScalar returnsSetOfScalar returnsCompositeAlias returnings) pgVer =

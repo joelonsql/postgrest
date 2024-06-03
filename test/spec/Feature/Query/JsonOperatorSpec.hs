@@ -2,7 +2,6 @@ module Feature.Query.JsonOperatorSpec where
 
 import Network.Wai (Application)
 
-import Network.HTTP.Types
 import Test.Hspec
 import Test.Hspec.Wai
 import Test.Hspec.Wai.JSON
@@ -277,14 +276,6 @@ spec actualPgVersion = describe "json and jsonb operators" $ do
       get "/arrays?select=id&order=numbers_mult->2->2.asc"
         `shouldRespondWith`
           [json| [{"id":0},{"id":1}] |]
-
-  context "Patching record, in a nonempty table" $
-    it "can set a json column to escaped value" $ do
-      request methodPatch "/json_table?data->>id=eq.3"
-          [("Prefer", "return=representation")]
-          [json| { "data": { "id":" \"escaped" } } |]
-        `shouldRespondWith`
-          [json| [{ "data": { "id":" \"escaped" } }] |]
 
   context "json array negative index" $ do
     it "can select with negative indexes" $ do

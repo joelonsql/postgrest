@@ -25,11 +25,9 @@ import qualified PostgREST.AppState           as AppState
 import qualified PostgREST.Error              as Error
 import qualified PostgREST.Query.QueryBuilder as QueryBuilder
 import qualified PostgREST.Query.Statements   as Statements
-import qualified PostgREST.RangeQuery         as RangeQuery
 import qualified PostgREST.SchemaCache        as SchemaCache
 
-import PostgREST.ApiRequest              (ApiRequest (..),
-                                          Mutation (..))
+import PostgREST.ApiRequest              (ApiRequest (..))
 import PostgREST.ApiRequest.Preferences  (PreferCount (..),
                                           PreferHandling (..),
                                           PreferMaxAffected (..),
@@ -49,8 +47,6 @@ import PostgREST.Plan                    (ActionPlan (..),
                                           DbActionPlan (..),
                                           InfoPlan (..),
                                           InspectPlan (..))
-import PostgREST.Plan.MutatePlan         (MutatePlan (..))
-import PostgREST.Plan.ReadPlan           (ReadPlanTree)
 import PostgREST.Query.SqlFragment       (escapeIdentList, fromQi,
                                           intercalateSnippet,
                                           setConfigWithConstantName,
@@ -59,7 +55,7 @@ import PostgREST.Query.SqlFragment       (escapeIdentList, fromQi,
 import PostgREST.Query.Statements        (ResultSet (..))
 import PostgREST.SchemaCache             (SchemaCache (..))
 import PostgREST.SchemaCache.Identifiers (QualifiedIdentifier (..))
-import PostgREST.SchemaCache.Routine     (MediaHandler, Routine (..),
+import PostgREST.SchemaCache.Routine     (Routine (..),
                                           RoutineMap)
 import PostgREST.SchemaCache.Table       (TablesMap)
 
@@ -129,34 +125,6 @@ actionQuery (DbCrud plan@WrappedReadPlan{..}) conf@AppConfig{..} apiReq@ApiReque
   optionalRollback conf apiReq
   DbCrudResult plan <$> resultSetWTotal conf apiReq resultSet countQuery
 
-actionQuery (DbCrud plan@MutateReadPlan{mrMutation=MutationCreate, ..}) conf apiReq _ _ = do
-  resultSet <- writeQuery mrReadPlan mrMutatePlan mrMedia mrHandler apiReq conf
-  failNotSingular mrMedia resultSet
-  optionalRollback conf apiReq
-  pure $ DbCrudResult plan resultSet
-
-actionQuery (DbCrud plan@MutateReadPlan{mrMutation=MutationUpdate, ..}) conf apiReq@ApiRequest{iPreferences=Preferences{..}, ..} _ _ = do
-  resultSet <- writeQuery mrReadPlan mrMutatePlan mrMedia mrHandler apiReq conf
-  failNotSingular mrMedia resultSet
-  failExceedsMaxAffectedPref (preferMaxAffected,preferHandling) resultSet
-  failsChangesOffLimits (RangeQuery.rangeLimit iTopLevelRange) resultSet
-  optionalRollback conf apiReq
-  pure $ DbCrudResult plan resultSet
-
-actionQuery (DbCrud plan@MutateReadPlan{mrMutation=MutationSingleUpsert, ..}) conf apiReq _ _ = do
-  resultSet <- writeQuery mrReadPlan mrMutatePlan mrMedia mrHandler apiReq conf
-  failPut resultSet
-  optionalRollback conf apiReq
-  pure $ DbCrudResult plan resultSet
-
-actionQuery (DbCrud plan@MutateReadPlan{mrMutation=MutationDelete, ..}) conf apiReq@ApiRequest{iPreferences=Preferences{..}, ..} _ _ = do
-  resultSet <- writeQuery mrReadPlan mrMutatePlan mrMedia mrHandler apiReq conf
-  failNotSingular mrMedia resultSet
-  failExceedsMaxAffectedPref (preferMaxAffected,preferHandling) resultSet
-  failsChangesOffLimits (RangeQuery.rangeLimit iTopLevelRange) resultSet
-  optionalRollback conf apiReq
-  pure $ DbCrudResult plan resultSet
-
 actionQuery (DbCall plan@CallReadPlan{..}) conf@AppConfig{..} apiReq@ApiRequest{iPreferences=Preferences{..}} pgVer _ = do
   resultSet <-
     lift . SQL.statement mempty $
@@ -190,36 +158,6 @@ actionQuery (MaybeDb plan@InspectPlan{ipSchema=tSchema}) AppConfig{..} _ pgVer s
         <$> SQL.statement tSchema (SchemaCache.schemaDescription configDbPreparedStatements))
     OADisabled ->
       pure $ MaybeDbResult plan Nothing
-
-writeQuery :: ReadPlanTree -> MutatePlan -> MediaType -> MediaHandler -> ApiRequest -> AppConfig  -> DbHandler ResultSet
-writeQuery readPlan mutatePlan mType mHandler ApiRequest{iPreferences=Preferences{..}} conf =
-  let
-    (isPut, isInsert, pkCols) = case mutatePlan of {Insert{where_,insPkCols} -> ((not . null) where_, True, insPkCols); _ -> (False,False, mempty);}
-  in
-  lift . SQL.statement mempty $
-    Statements.prepareWrite
-      (QueryBuilder.readPlanToQuery readPlan)
-      (QueryBuilder.mutatePlanToQuery mutatePlan)
-      isInsert
-      isPut
-      mType
-      mHandler
-      preferRepresentation
-      preferResolution
-      pkCols
-      (configDbPreparedStatements conf)
-
--- Makes sure the querystring pk matches the payload pk
--- e.g. PUT /items?id=eq.1 { "id" : 1, .. } is accepted,
--- PUT /items?id=eq.14 { "id" : 2, .. } is rejected.
--- If this condition is not satisfied then nothing is inserted,
--- check the WHERE for INSERT in QueryBuilder.hs to see how it's done
-failPut :: ResultSet -> DbHandler ()
-failPut RSPlan{} = pure ()
-failPut RSStandard{rsQueryTotal=queryTotal} =
-  when (queryTotal /= 1) $ do
-    lift SQL.condemn
-    throwError $ Error.ApiRequestError ApiRequestTypes.PutMatchingPkError
 
 resultSetWTotal :: AppConfig -> ApiRequest -> ResultSet -> SQL.Snippet -> DbHandler ResultSet
 resultSetWTotal _ _ rs@RSPlan{} _ = return rs
@@ -259,14 +197,6 @@ failExceedsMaxAffectedPref _ RSPlan{} = pure ()
 failExceedsMaxAffectedPref (Just (PreferMaxAffected n), handling) RSStandard{rsQueryTotal=queryTotal} = when ((queryTotal > n) && (handling == Just Strict)) $ do
   lift SQL.condemn
   throwError $ Error.ApiRequestError . ApiRequestTypes.MaxAffectedViolationError $ toInteger queryTotal
-
-failsChangesOffLimits :: Maybe Integer -> ResultSet -> DbHandler ()
-failsChangesOffLimits _ RSPlan{} = pure ()
-failsChangesOffLimits Nothing _  = pure ()
-failsChangesOffLimits (Just maxChanges) RSStandard{rsQueryTotal=queryTotal} =
-  when (queryTotal > fromIntegral maxChanges) $ do
-    lift SQL.condemn
-    throwError $ Error.ApiRequestError $ ApiRequestTypes.OffLimitsChangesError queryTotal maxChanges
 
 -- | Set a transaction to roll back if requested
 optionalRollback :: AppConfig -> ApiRequest -> DbHandler ()

@@ -2,7 +2,6 @@ module Feature.Query.AndOrParamsSpec where
 
 import Network.Wai (Application)
 
-import Network.HTTP.Types
 import Test.Hspec
 import Test.Hspec.Wai
 import Test.Hspec.Wai.JSON
@@ -230,35 +229,6 @@ spec actualPgVersion =
             [json|[{"id":1}, {"id":2}, {"id":3}, {"id":4}]|] { matchHeaders = [matchContentTypeJson] }
           get "/grandchild_entities?and=( id.eq.1, not.or(id.eq.2, id.eq.3), id.in.(1,4), or(id.eq.1, id.eq.4) )&select=id" `shouldRespondWith`
             [json|[{"id":1}]|] { matchHeaders = [matchContentTypeJson] }
-
-    context "used with POST" $
-      it "includes related data with filters" $
-        request methodPost "/child_entities?select=id,entities(id)&entities.or=(id.eq.2,id.eq.3)&entities.order=id"
-            [("Prefer", "return=representation")]
-            [json|[
-              {"id":7,"name":"entity 4","parent_id":1},
-              {"id":8,"name":"entity 5","parent_id":2},
-              {"id":9,"name":"entity 6","parent_id":3}
-            ]|]
-          `shouldRespondWith`
-            [json|[{"id": 7, "entities":null}, {"id": 8, "entities": {"id": 2}}, {"id": 9, "entities": {"id": 3}}]|]
-            { matchStatus = 201 }
-
-    context "used with PATCH" $
-      it "succeeds when using and/or params" $
-        request methodPatch "/grandchild_entities?or=(id.eq.1,id.eq.2)&select=id,name"
-          [("Prefer", "return=representation")]
-          [json|{ name : "updated grandchild entity"}|] `shouldRespondWith`
-          [json|[{ "id": 1, "name" : "updated grandchild entity"},{ "id": 2, "name" : "updated grandchild entity"}]|]
-          { matchHeaders = [matchContentTypeJson] }
-
-    context "used with DELETE" $
-      it "succeeds when using and/or params" $
-        request methodDelete "/grandchild_entities?or=(id.eq.1,id.eq.2)&select=id,name"
-            [("Prefer", "return=representation")]
-            ""
-          `shouldRespondWith`
-            [json|[{ "id": 1, "name" : "grandchild entity 1" },{ "id": 2, "name" : "grandchild entity 2" }]|]
 
     it "can query columns that begin with and/or reserved words" $
       get "/grandchild_entities?or=(and_starting_col.eq.smth, or_starting_col.eq.smth)" `shouldRespondWith` 200

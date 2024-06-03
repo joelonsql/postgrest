@@ -13,16 +13,6 @@ import SpecHelper
 spec :: SpecWith ((), Application)
 spec =
   describe "GUC headers on all methods via pre-request" $ do
-    it "succeeds setting the headers on POST" $
-      post "/items"
-          [json|[{"id": 11111}]|]
-        `shouldRespondWith`
-          ""
-          { matchStatus = 201
-          , matchHeaders = [ matchHeaderAbsent hContentType
-                           , "X-Custom-Header" <:> "mykey=myval" ]
-          }
-
     it "succeeds setting the headers on GET and HEAD" $ do
       request methodGet "/items?id=eq.1"
           [("User-Agent", "MSIE 6.0")]
@@ -49,34 +39,6 @@ spec =
                            , "Content-Disposition" <:> "attachment; filename=projects.csv" ]
           }
 
-    it "succeeds setting the headers on PATCH" $
-        patch "/items?id=eq.1"
-            [json|[{"id": 11111}]|]
-          `shouldRespondWith`
-            ""
-            { matchStatus = 204
-            , matchHeaders = [ matchHeaderAbsent hContentType
-                             , "X-Custom-Header" <:> "mykey=myval" ]
-            }
-
-    it "succeeds setting the headers on PUT" $
-      put "/items?id=eq.1"
-          [json|[{"id": 1}]|]
-        `shouldRespondWith`
-          ""
-          { matchStatus = 204
-          , matchHeaders = [ matchHeaderAbsent hContentType
-                           , "X-Custom-Header" <:> "mykey=myval" ]
-          }
-
-    it "succeeds setting the headers on DELETE" $
-      delete "/items?id=eq.1"
-        `shouldRespondWith`
-          ""
-          { matchStatus = 204
-          , matchHeaders = [ matchHeaderAbsent hContentType
-                           , "X-Custom-Header" <:> "mykey=myval" ]
-          }
     it "can override the Content-Type header" $ do
       request methodHead "/clients?id=eq.1"
           []

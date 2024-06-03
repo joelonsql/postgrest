@@ -13,7 +13,6 @@ import qualified Data.Text            as T
 import           Network.HTTP.Types
 import           Test.Hspec           hiding (pendingWith)
 import           Test.Hspec.Wai
-import           Test.Hspec.Wai.JSON
 
 import PostgREST.Config.PgVersion (PgVersion, pgVersion120,
                                    pgVersion130)
@@ -139,127 +138,6 @@ spec actualPgVersion = do
           if actualPgVersion >= pgVersion120
             then Just [aesonQQ| "COALESCE((json_agg(ROW(projects.id, projects.name, projects.client_id)) -> 0), 'null'::json)" |]
             else Just [aesonQQ| "COALESCE((json_agg(ROW(pgrst_source.id, pgrst_source.name, pgrst_source.client_id)) -> 0), 'null'::json)" |]
-
-  describe "writes plans" $ do
-    it "outputs the total cost for an insert" $ do
-      r <- request methodPost "/projects"
-             (acceptHdrs "application/vnd.pgrst.plan+json") [json|{"id":100, "name": "Project 100"}|]
-
-      let totalCost  = planCost r
-          resHeaders = simpleHeaders r
-          resStatus  = simpleStatus r
-
-      liftIO $ do
-        resHeaders `shouldSatisfy` elem ("Content-Type", "application/vnd.pgrst.plan+json; for=\"application/json\"; charset=utf-8")
-        resStatus `shouldBe` Status { statusCode = 200, statusMessage="OK" }
-        totalCost `shouldBe` 0.06
-
-    it "outputs the total cost for an update" $ do
-      r <- request methodPatch "/projects?id=eq.3"
-             (acceptHdrs "application/vnd.pgrst.plan+json") [json|{"name": "Patched Project"}|]
-
-      let totalCost  = planCost r
-          resHeaders = simpleHeaders r
-          resStatus  = simpleStatus r
-
-      liftIO $ do
-        resHeaders `shouldSatisfy` elem ("Content-Type", "application/vnd.pgrst.plan+json; for=\"application/json\"; charset=utf-8")
-        resStatus `shouldBe` Status { statusCode = 200, statusMessage="OK" }
-        totalCost `shouldBe` 8.23
-
-    it "outputs the total cost for a delete" $ do
-      r <- request methodDelete "/projects?id=in.(1,2,3)"
-             (acceptHdrs "application/vnd.pgrst.plan+json") ""
-
-      let totalCost  = planCost r
-          resHeaders = simpleHeaders r
-          resStatus  = simpleStatus r
-
-      liftIO $ do
-        resHeaders `shouldSatisfy` elem ("Content-Type", "application/vnd.pgrst.plan+json; for=\"application/json\"; charset=utf-8")
-        resStatus `shouldBe` Status { statusCode = 200, statusMessage="OK" }
-        totalCost `shouldBe` 15.68
-
-    it "outputs the total cost for a single upsert" $ do
-      r <- request methodPut "/tiobe_pls?name=eq.Go"
-            (acceptHdrs "application/vnd.pgrst.plan+json")
-            [json| [ { "name": "Go", "rank": 19 } ]|]
-
-      let totalCost  = planCost r
-          resHeaders = simpleHeaders r
-          resStatus  = simpleStatus r
-
-      liftIO $ do
-        resHeaders `shouldSatisfy` elem ("Content-Type", "application/vnd.pgrst.plan+json; for=\"application/json\"; charset=utf-8")
-        resStatus `shouldBe` Status { statusCode = 200, statusMessage="OK" }
-        totalCost `shouldBe` 3.55
-
-    it "outputs the total cost for 2 upserts" $ do
-      r <- request methodPost "/tiobe_pls"
-            [("Prefer","resolution=merge-duplicates"), ("Accept","application/vnd.pgrst.plan+json")]
-            [json| [ { "name": "Python", "rank": 19 }, { "name": "Go", "rank": 20} ]|]
-
-      let totalCost  = planCost r
-          resStatus  = simpleStatus r
-          resHeaders = simpleHeaders r
-
-      liftIO $ do
-        resHeaders `shouldSatisfy` elem ("Content-Type", "application/vnd.pgrst.plan+json; for=\"application/json\"; charset=utf-8")
-        resStatus `shouldBe` Status { statusCode = 200, statusMessage="OK" }
-        totalCost `shouldBe` 5.53
-
-    it "outputs the total cost for an upsert with 10 rows" $ do
-      r <- request methodPost "/tiobe_pls"
-            [("Prefer","resolution=merge-duplicates"), ("Accept","application/vnd.pgrst.plan+json")]
-            (getInsertDataForTiobePlsTable 10)
-
-      let totalCost  = planCost r
-          resStatus  = simpleStatus r
-          resHeaders = simpleHeaders r
-
-      liftIO $ do
-        resHeaders `shouldSatisfy` elem ("Content-Type", "application/vnd.pgrst.plan+json; for=\"application/json\"; charset=utf-8")
-        resStatus `shouldBe` Status { statusCode = 200, statusMessage="OK" }
-        totalCost `shouldBe` 5.53
-
-    it "outputs the total cost for an upsert with 100 rows" $ do
-      r <- request methodPost "/tiobe_pls"
-            [("Prefer","resolution=merge-duplicates"), ("Accept","application/vnd.pgrst.plan+json")]
-            (getInsertDataForTiobePlsTable 100)
-
-      let totalCost  = planCost r
-          resStatus  = simpleStatus r
-          resHeaders = simpleHeaders r
-
-      liftIO $ do
-        resHeaders `shouldSatisfy` elem ("Content-Type", "application/vnd.pgrst.plan+json; for=\"application/json\"; charset=utf-8")
-        resStatus `shouldBe` Status { statusCode = 200, statusMessage="OK" }
-        totalCost `shouldBe` 5.53
-
-    it "outputs the total cost for an upsert with 1000 rows" $ do
-      r <- request methodPost "/tiobe_pls"
-            [("Prefer","resolution=merge-duplicates"), ("Accept","application/vnd.pgrst.plan+json")]
-            (getInsertDataForTiobePlsTable 1000)
-
-      let totalCost  = planCost r
-          resStatus  = simpleStatus r
-          resHeaders = simpleHeaders r
-
-      liftIO $ do
-        resHeaders `shouldSatisfy` elem ("Content-Type", "application/vnd.pgrst.plan+json; for=\"application/json\"; charset=utf-8")
-        resStatus `shouldBe` Status { statusCode = 200, statusMessage="OK" }
-        totalCost `shouldBe` 5.53
-
-    it "outputs the plan for application/vnd.pgrst.object" $ do
-      r <- request methodDelete "/projects?id=eq.6"
-        [("Prefer", "return=representation"), ("Accept", "application/vnd.pgrst.plan+json; for=\"application/vnd.pgrst.object\"; options=verbose")] ""
-
-      let aggCol  = simpleBody r ^? nth 0 . key "Plan" . key "Output" . nth 3
-          resHeaders = simpleHeaders r
-
-      liftIO $ do
-        resHeaders `shouldSatisfy` elem ("Content-Type", "application/vnd.pgrst.plan+json; for=\"application/vnd.pgrst.object+json\"; options=verbose; charset=utf-8")
-        aggCol `shouldBe` Just [aesonQQ| "COALESCE((json_agg(ROW(projects.id, projects.name, projects.client_id)) -> 0), 'null'::json)" |]
 
   describe "function plan" $ do
     it "outputs the total cost for a function call" $ do
@@ -467,8 +345,4 @@ disabledSpec =
 
     request methodGet "/rpc/getallprojects?id=in.(1,2,3)"
       (acceptHdrs "application/vnd.pgrst.plan") ""
-      `shouldRespondWith` 406
-
-    request methodDelete "/projects?id=in.(1,2,3)"
-           (acceptHdrs "application/vnd.pgrst.plan") ""
       `shouldRespondWith` 406

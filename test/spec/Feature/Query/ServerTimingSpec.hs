@@ -74,16 +74,6 @@ spec =
           , matchHeaders = map matchServerTimingHasTiming ["jwt", "parse", "plan", "transaction", "response"]
           }
 
-      it "works with root spec" $
-        request methodHead "/"
-          []
-          ""
-          `shouldRespondWith`
-          ""
-          { matchStatus  = 200
-          , matchHeaders = map matchServerTimingHasTiming ["jwt", "parse", "plan", "transaction", "response"]
-          }
-
       it "works with OPTIONS method" $ do
         request methodOptions "/organizations"
           []

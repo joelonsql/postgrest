@@ -12,9 +12,6 @@ import Protolude hiding (get)
 nonExistentSchema :: SpecWith ((), Application)
 nonExistentSchema = do
   describe "Non existent api schema" $ do
-    it "succeeds when requesting root path" $
-      get "/" `shouldRespondWith` 200
-
     it "gives 404 when requesting a nonexistent table in this nonexistent schema" $
       get "/nonexistent_table" `shouldRespondWith` 404
 

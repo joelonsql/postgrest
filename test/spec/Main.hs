@@ -30,12 +30,6 @@ import qualified Feature.CorsSpec
 import qualified Feature.ExtraSearchPathSpec
 import qualified Feature.NoSuperuserSpec
 import qualified Feature.ObservabilitySpec
-import qualified Feature.OpenApi.DisabledOpenApiSpec
-import qualified Feature.OpenApi.IgnorePrivOpenApiSpec
-import qualified Feature.OpenApi.OpenApiSpec
-import qualified Feature.OpenApi.ProxySpec
-import qualified Feature.OpenApi.RootSpec
-import qualified Feature.OpenApi.SecurityOpenApiSpec
 import qualified Feature.OptionsSpec
 import qualified Feature.Query.AggregateFunctionsSpec
 import qualified Feature.Query.AndOrParamsSpec
@@ -105,16 +99,12 @@ main = do
 
   let withApp              = app testCfg
       maxRowsApp           = app testMaxRowsCfg
-      disabledOpenApi      = app testDisabledOpenApiCfg
-      securityOpenApi      = app testSecurityOpenApiCfg
-      proxyApp             = app testProxyCfg
       noAnonApp            = app testCfgNoAnon
       noJwtApp             = app testCfgNoJWT
       binaryJwtApp         = app testCfgBinaryJWT
       audJwtApp            = app testCfgAudienceJWT
       asymJwkApp           = app testCfgAsymJWK
       asymJwkSetApp        = app testCfgAsymJWKSet
-      rootSpecApp          = app testCfgRootSpec
       responseHeadersApp   = app testCfgResponseHeaders
       disallowRollbackApp  = app testCfgDisallowRollback
       forceRollbackApp     = app testCfgForceRollback
@@ -128,7 +118,6 @@ main = do
       unicodeApp           = appDbs testUnicodeCfg
       nonexistentSchemaApp = appDbs testNonexistentSchemaCfg
       multipleSchemaApp    = appDbs testMultipleSchemaCfg
-      ignorePrivOpenApi    = appDbs testIgnorePrivOpenApiCfg
 
 
   let analyze :: IO ()
@@ -142,7 +131,6 @@ main = do
         , ("Feature.CorsSpec"                            , Feature.CorsSpec.spec)
         , ("Feature.CustomMediaSpec"                     , Feature.Query.CustomMediaSpec.spec)
         , ("Feature.NoSuperuserSpec"                     , Feature.NoSuperuserSpec.spec)
-        , ("Feature.OpenApi.OpenApiSpec"                 , Feature.OpenApi.OpenApiSpec.spec actualPgVersion)
         , ("Feature.OptionsSpec"                         , Feature.OptionsSpec.spec actualPgVersion)
         , ("Feature.Query.AndOrParamsSpec"               , Feature.Query.AndOrParamsSpec.spec actualPgVersion)
         , ("Feature.Query.ComputedRelsSpec"              , Feature.Query.ComputedRelsSpec.spec)
@@ -181,22 +169,6 @@ main = do
     parallel $ before unicodeApp $
       describe "Feature.Query.UnicodeSpec" Feature.Query.UnicodeSpec.spec
 
-    -- this test runs with openapi-mode set to disabled
-    parallel $ before disabledOpenApi $
-      describe "Feature.DisabledOpenApiSpec" Feature.OpenApi.DisabledOpenApiSpec.spec
-
-    -- this test runs with openapi-mode set to ignore-acl
-    parallel $ before ignorePrivOpenApi $
-      describe "Feature.OpenApi.IgnorePrivOpenApiSpec" Feature.OpenApi.IgnorePrivOpenApiSpec.spec
-
-    -- this test runs with a proxy
-    parallel $ before proxyApp $
-      describe "Feature.OpenApi.ProxySpec" Feature.OpenApi.ProxySpec.spec
-
-    -- this test runs with openapi-security-active set to true
-    parallel $ before securityOpenApi $
-      describe "Feature.OpenApi.SecurityOpenApiSpec" Feature.OpenApi.SecurityOpenApiSpec.spec
-
     -- this test runs without an anonymous role
     parallel $ before noAnonApp $
       describe "Feature.Auth.NoAnonSpec" Feature.Auth.NoAnonSpec.spec
@@ -229,10 +201,6 @@ main = do
     parallel $ before extraSearchPathApp $ do
       describe "Feature.ExtraSearchPathSpec" Feature.ExtraSearchPathSpec.spec
       describe "Feature.Query.PostGISSpec" $ Feature.Query.PostGISSpec.spec actualPgVersion
-
-    -- this test runs with a root spec function override
-    parallel $ before rootSpecApp $
-      describe "Feature.OpenApi.RootSpec" Feature.OpenApi.RootSpec.spec
 
     -- this test runs with a pre request function override
     parallel $ before responseHeadersApp $

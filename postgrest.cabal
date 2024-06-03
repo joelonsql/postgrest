@@ -210,12 +210,6 @@ test-suite spec
                       Feature.ExtraSearchPathSpec
                       Feature.NoSuperuserSpec
                       Feature.ObservabilitySpec
-                      Feature.OpenApi.DisabledOpenApiSpec
-                      Feature.OpenApi.IgnorePrivOpenApiSpec
-                      Feature.OpenApi.OpenApiSpec
-                      Feature.OpenApi.ProxySpec
-                      Feature.OpenApi.RootSpec
-                      Feature.OpenApi.SecurityOpenApiSpec
                       Feature.OptionsSpec
                       Feature.Query.AggregateFunctionsSpec
                       Feature.Query.AndOrParamsSpec

@@ -22,7 +22,6 @@ import qualified Network.HTTP.Types.URI    as HTTP
 import qualified PostgREST.Error            as Error
 import qualified PostgREST.MediaType        as MediaType
 import qualified PostgREST.RangeQuery       as RangeQuery
-import qualified PostgREST.Response.OpenAPI as OpenAPI
 
 import PostgREST.ApiRequest              (ApiRequest (..),
                                           InvokeMethod (..),
@@ -37,8 +36,7 @@ import PostgREST.Config                  (AppConfig (..))
 import PostgREST.MediaType               (MediaType (..))
 import PostgREST.Plan                    (CallReadPlan (..),
                                           CrudPlan (..),
-                                          InfoPlan (..),
-                                          InspectPlan (..))
+                                          InfoPlan (..))
 import PostgREST.Plan.MutatePlan         (MutatePlan (..))
 import PostgREST.Query                   (QueryResult (..))
 import PostgREST.Query.Statements        (ResultSet (..))
@@ -224,10 +222,7 @@ actionResponse (DbCallResult CallReadPlan{crMedia, crInvMthd=invMethod, crProc=p
   RSPlan plan ->
     Right $ PgrstResponse HTTP.status200 (contentTypeHeaders crMedia ctxApiRequest) $ LBS.fromStrict plan
 
-actionResponse (MaybeDbResult InspectPlan{ipHdrsOnly=headersOnly} body) _ versions conf sCache schema negotiatedByProfile =
-  Right $ PgrstResponse HTTP.status200
-    (MediaType.toContentType MTOpenAPI : maybeToList (profileHeader schema negotiatedByProfile))
-    (maybe mempty (\(x, y, z) -> if headersOnly then mempty else OpenAPI.encode versions conf sCache x y z) body)
+actionResponse (MaybeDbResult _ _) _ _ _ _ _ _ = Left $ Error.ApiRequestError ApiRequestTypes.NotFound
 
 actionResponse (NoDbResult (RelInfoPlan identifier)) _ _ _ sCache _ _ =
   case HM.lookup identifier (dbTables sCache) of

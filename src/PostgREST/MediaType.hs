@@ -30,7 +30,6 @@ data MediaType
   | MTTextCSV
   | MTTextPlain
   | MTTextXML
-  | MTOpenAPI
   | MTUrlEncoded
   | MTOctetStream
   | MTAny
@@ -70,7 +69,6 @@ toMime MTGeoJSON              = "application/geo+json"
 toMime MTTextCSV              = "text/csv"
 toMime MTTextPlain            = "text/plain"
 toMime MTTextXML              = "text/xml"
-toMime MTOpenAPI              = "application/openapi+json"
 toMime (MTVndSingularJSON True)  = "application/vnd.pgrst.object+json;nulls=stripped"
 toMime (MTVndSingularJSON False) = "application/vnd.pgrst.object+json"
 toMime MTUrlEncoded           = "application/x-www-form-urlencoded"
@@ -137,7 +135,6 @@ decodeMediaType mt = decodeMediaType' $ decodeLatin1 mt
         ("text", "csv", _)                          -> MTTextCSV
         ("text", "plain", _)                        -> MTTextPlain
         ("text", "xml", _)                          -> MTTextXML
-        ("application", "openapi+json", _)          -> MTOpenAPI
         ("application", "x-www-form-urlencoded", _) -> MTUrlEncoded
         ("application", "octet-stream", _)          -> MTOctetStream
         ("application", "vnd.pgrst.plan", _)        -> getPlan PlanText

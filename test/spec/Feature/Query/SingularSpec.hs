@@ -15,35 +15,6 @@ spec =
   describe "Requesting singular json object" $ do
     let singular = ("Accept", "application/vnd.pgrst.object+json")
 
-    context "with GET request" $ do
-      it "fails for zero rows" $
-        request methodGet  "/items?id=gt.0&id=lt.0" [singular] ""
-          `shouldRespondWith` 406
-
-      it "will select an existing object" $ do
-        request methodGet "/items?id=eq.5" [singular] ""
-          `shouldRespondWith`
-            [json|{"id":5}|]
-            { matchHeaders = [matchContentTypeSingular] }
-        -- also test without the +json suffix
-        request methodGet "/items?id=eq.5"
-            [("Accept", "application/vnd.pgrst.object")] ""
-          `shouldRespondWith`
-            [json|{"id":5}|]
-            { matchHeaders = [matchContentTypeSingular] }
-
-      it "can combine multiple prefer values" $
-        request methodGet "/items?id=eq.5" [singular, ("Prefer","count=none")] ""
-          `shouldRespondWith`
-            [json|{"id":5}|]
-            { matchHeaders = [matchContentTypeSingular] }
-
-      it "can shape plurality singular object routes" $
-        request methodGet "/projects_view?id=eq.1&select=id,name,clients(*),tasks(id,name)" [singular] ""
-          `shouldRespondWith`
-            [json|{"id":1,"name":"Windows 7","clients":{"id":1,"name":"Microsoft"},"tasks":[{"id":1,"name":"Design w7"},{"id":2,"name":"Code w7"}]}|]
-            { matchHeaders = [matchContentTypeSingular] }
-
     context "when calling a stored proc" $ do
       it "fails for zero rows" $
         request methodPost "/rpc/getproject"

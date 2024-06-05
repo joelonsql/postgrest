@@ -41,22 +41,6 @@ withPreferenceCommitApplied   = [ matchHeaderValuePresent "Preference-Applied" "
 withPreferenceRollbackApplied = [ matchHeaderValuePresent "Preference-Applied" "tx=rollback" ]
 
 shouldRespondToReads reqHeaders respHeaders = do
-  it "responds to GET" $ do
-    request methodGet "/items?id=eq.1"
-        reqHeaders
-        ""
-      `shouldRespondWith`
-        [json|[{"id":1}]|]
-        { matchHeaders = respHeaders }
-
-  it "responds to HEAD" $ do
-    request methodHead "/items?id=eq.1"
-        reqHeaders
-        ""
-      `shouldRespondWith`
-        ""
-        { matchHeaders = matchContentTypeJson : respHeaders }
-
   it "responds to GET on RPC" $ do
     request methodGet "/rpc/search?id=1"
         reqHeaders

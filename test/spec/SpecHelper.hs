@@ -15,14 +15,13 @@ import Data.Aeson           ((.=))
 import Data.CaseInsensitive (CI (..), mk, original)
 import Data.List            (lookup)
 import Data.List.NonEmpty   (fromList)
-import Network.Wai.Test     (SResponse (simpleBody, simpleHeaders, simpleStatus))
+import Network.Wai.Test     (SResponse (simpleBody))
 import System.IO.Unsafe     (unsafePerformIO)
 import System.Process       (readProcess)
 import Text.Regex.TDFA      ((=~))
 
 
 import Network.HTTP.Types
-import Test.Hspec
 import Test.Hspec.Wai
 import Test.Hspec.Wai.JSON
 import Text.Heredoc
@@ -31,7 +30,6 @@ import Data.String                       (String)
 import PostgREST.Config                  (AppConfig (..),
                                           JSPathExp (..),
                                           LogLevel (..),
-                                          OpenAPIMode (..),
                                           parseSecret)
 import PostgREST.SchemaCache.Identifiers (QualifiedIdentifier (..))
 import Protolude                         hiding (get, toS)
@@ -82,31 +80,6 @@ matchServerTimingHasTiming metric = MatchHeader $ \headers _body ->
                   else Just $ "missing metric: " <> metric <> "\n"
     Nothing  -> Just "missing Server-Timing header\n"
 
-validateOpenApiResponse :: [Header] -> WaiSession () ()
-validateOpenApiResponse headers = do
-  r <- request methodGet "/" headers ""
-  liftIO $
-    let respStatus = simpleStatus r in
-    respStatus `shouldSatisfy`
-      \s -> s == Status { statusCode = 200, statusMessage="OK" }
-  liftIO $
-    let respHeaders = simpleHeaders r in
-    respHeaders `shouldSatisfy`
-      \hs -> ("Content-Type", "application/openapi+json; charset=utf-8") `elem` hs
-  Just body <- pure $ JSON.decode (simpleBody r)
-  Just schema <- liftIO $ JSON.decode <$> BL.readFile "test/spec/fixtures/openapi.json"
-  let args :: M.Map Text JSON.Value
-      args = M.fromList
-        [ ( "schema", schema )
-        , ( "data", body ) ]
-      hdrs = acceptHdrs "application/json"
-  request methodPost "/rpc/validate_json_schema" hdrs (JSON.encode args)
-      `shouldRespondWith` "true"
-      { matchStatus = 200
-      , matchHeaders = []
-      }
-
-
 baseCfg :: AppConfig
 baseCfg = let secret = Just $ encodeUtf8 "reallyreallyreallyreallyverysafe" in
   AppConfig {
@@ -139,9 +112,6 @@ baseCfg = let secret = Just $ encodeUtf8 "reallyreallyreallyreallyverysafe" in
   , configJwtSecretIsBase64         = False
   , configJwtCacheMaxLifetime       = 0
   , configLogLevel                  = LogCrit
-  , configOpenApiMode               = OAFollowPriv
-  , configOpenApiSecurityActive     = False
-  , configOpenApiServerProxyUri     = Nothing
   , configServerCorsAllowedOrigins  = Nothing
   , configServerHost                = "localhost"
   , configServerPort                = 3000
@@ -177,18 +147,6 @@ testUnicodeCfg = baseCfg { configDbSchemas = fromList ["تست"] }
 
 testMaxRowsCfg :: AppConfig
 testMaxRowsCfg = baseCfg { configDbMaxRows = Just 2 }
-
-testDisabledOpenApiCfg :: AppConfig
-testDisabledOpenApiCfg = baseCfg { configOpenApiMode = OADisabled }
-
-testIgnorePrivOpenApiCfg :: AppConfig
-testIgnorePrivOpenApiCfg = baseCfg { configOpenApiMode = OAIgnorePriv, configDbSchemas = fromList ["test", "v1"] }
-
-testProxyCfg :: AppConfig
-testProxyCfg = baseCfg { configOpenApiServerProxyUri = Just "https://postgrest.com/openapi.json" }
-
-testSecurityOpenApiCfg :: AppConfig
-testSecurityOpenApiCfg = baseCfg { configOpenApiSecurityActive = True }
 
 testPlanEnabledCfg :: AppConfig
 testPlanEnabledCfg = baseCfg { configDbPlanEnabled = True }

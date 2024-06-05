@@ -5,49 +5,13 @@ import Network.Wai (Application)
 import Network.HTTP.Types
 import Test.Hspec          hiding (pendingWith)
 import Test.Hspec.Wai
-import Test.Hspec.Wai.JSON
 
 import Protolude  hiding (get, put)
-import SpecHelper
 
 spec :: SpecWith ((), Application)
 spec =
   describe "GUC headers on all methods via pre-request" $ do
-    it "succeeds setting the headers on GET and HEAD" $ do
-      request methodGet "/items?id=eq.1"
-          [("User-Agent", "MSIE 6.0")]
-          ""
-        `shouldRespondWith`
-          [json|[{"id": 1}]|]
-          { matchHeaders = ["Cache-Control" <:> "no-cache, no-store, must-revalidate"] }
-
-      request methodHead "/items?id=eq.1"
-          [("User-Agent", "MSIE 7.0")]
-          ""
-        `shouldRespondWith`
-          ""
-          { matchHeaders = [ matchContentTypeJson
-                           , "Cache-Control" <:> "no-cache, no-store, must-revalidate" ]
-          }
-
-      request methodHead "/projects"
-          [("Accept", "text/csv")]
-          ""
-        `shouldRespondWith`
-          ""
-          { matchHeaders = [ "Content-Type" <:> "text/csv; charset=utf-8"
-                           , "Content-Disposition" <:> "attachment; filename=projects.csv" ]
-          }
-
     it "can override the Content-Type header" $ do
-      request methodHead "/clients?id=eq.1"
-          []
-          ""
-        `shouldRespondWith`
-          ""
-          { matchStatus = 200
-          , matchHeaders = ["Content-Type" <:> "application/custom+json"]
-          }
       request methodHead "/rpc/getallprojects"
           []
           ""

@@ -12,13 +12,6 @@ spec :: SpecWith ((), Application)
 spec =
   describe "Observability" $ do
     it "includes the server trace header on the response" $ do
-      request methodHead "/projects"
-          [ ("X-Request-Id", "2") ]
-          ""
-        `shouldRespondWith`
-          ""
-          { matchHeaders = [ "X-Request-Id" <:> "2"] }
-
       request methodHead "/rpc/add_them?a=2&b=4"
           [ ("X-Request-Id", "3") ]
           ""

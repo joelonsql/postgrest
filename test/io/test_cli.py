@@ -231,21 +231,6 @@ def test_invalid_role_claim_key(invalidroleclaimkey, defaultenv):
                 print(line)
 
 
-@pytest.mark.parametrize("invalidopenapimodes", FIXTURES["invalidopenapimodes"])
-def test_invalid_openapi_mode(invalidopenapimodes, defaultenv):
-    "Given an invalid openapi-mode, Postgrest should exit with a non-zero exit code."
-    env = {
-        **defaultenv,
-        "PGRST_OPENAPI_MODE": invalidopenapimodes,
-    }
-
-    with pytest.raises(PostgrestError):
-        dump = dumpconfig(CONFIGSDIR / "defaults.config", env=env)
-        for line in dump.split("\n"):
-            if line.startswith("openapi-mode"):
-                print(line)
-
-
 # If this test is failing, run postgrest-test-io --snapshot-update -k test_schema_cache_snapshot
 @pytest.mark.parametrize(
     "key",

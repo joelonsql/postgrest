@@ -13,7 +13,6 @@ import qualified Data.ByteString                   as BS
 import qualified Data.ByteString.Lazy.Char8        as LBS
 import           Data.Either.Combinators           (mapLeft)
 import qualified Data.HashMap.Strict               as HM
-import qualified Data.Set                          as S
 import qualified Hasql.Decoders                    as HD
 import qualified Hasql.DynamicStatements.Snippet   as SQL (Snippet)
 import qualified Hasql.DynamicStatements.Statement as SQL
@@ -25,7 +24,6 @@ import qualified PostgREST.AppState           as AppState
 import qualified PostgREST.Error              as Error
 import qualified PostgREST.Query.QueryBuilder as QueryBuilder
 import qualified PostgREST.Query.Statements   as Statements
-import qualified PostgREST.SchemaCache        as SchemaCache
 
 import PostgREST.ApiRequest              (ApiRequest (..))
 import PostgREST.ApiRequest.Preferences  (PreferCount (..),
@@ -36,8 +34,7 @@ import PostgREST.ApiRequest.Preferences  (PreferCount (..),
                                           Preferences (..),
                                           shouldCount)
 import PostgREST.Auth                    (AuthResult (..))
-import PostgREST.Config                  (AppConfig (..),
-                                          OpenAPIMode (..))
+import PostgREST.Config                  (AppConfig (..))
 import PostgREST.Config.PgVersion        (PgVersion (..))
 import PostgREST.Error                   (Error)
 import PostgREST.MediaType               (MediaType (..))
@@ -45,8 +42,7 @@ import PostgREST.Plan                    (ActionPlan (..),
                                           CallReadPlan (..),
                                           CrudPlan (..),
                                           DbActionPlan (..),
-                                          InfoPlan (..),
-                                          InspectPlan (..))
+                                          InfoPlan (..))
 import PostgREST.Query.SqlFragment       (escapeIdentList, fromQi,
                                           intercalateSnippet,
                                           setConfigWithConstantName,
@@ -54,10 +50,7 @@ import PostgREST.Query.SqlFragment       (escapeIdentList, fromQi,
                                           setConfigWithDynamicName)
 import PostgREST.Query.Statements        (ResultSet (..))
 import PostgREST.SchemaCache             (SchemaCache (..))
-import PostgREST.SchemaCache.Identifiers (QualifiedIdentifier (..))
-import PostgREST.SchemaCache.Routine     (Routine (..),
-                                          RoutineMap)
-import PostgREST.SchemaCache.Table       (TablesMap)
+import PostgREST.SchemaCache.Routine     (Routine (..))
 
 import Protolude hiding (Handler)
 
@@ -66,7 +59,6 @@ type DbHandler = ExceptT Error SQL.Transaction
 data QueryResult
   = DbCrudResult  CrudPlan ResultSet
   | DbCallResult  CallReadPlan  ResultSet
-  | MaybeDbResult InspectPlan  (Maybe (TablesMap, RoutineMap, Maybe Text))
   | NoDbResult    InfoPlan
 
 -- TODO This function needs to be free from IO, only App.hs should do IO
@@ -94,7 +86,6 @@ runQuery appState config AuthResult{..} apiReq (Db plan) sCache pgVer authentica
 planTxMode :: DbActionPlan -> SQL.Mode
 planTxMode (DbCrud x)  = pTxMode x
 planTxMode (DbCall x)  = crTxMode x
-planTxMode (MaybeDb x) = ipTxmode x
 
 planIsoLvl :: AppConfig -> ByteString -> DbActionPlan -> SQL.IsolationLevel
 planIsoLvl AppConfig{configRoleIsoLvl} role actPlan = case actPlan of
@@ -142,22 +133,6 @@ actionQuery (DbCall plan@CallReadPlan{..}) conf@AppConfig{..} apiReq@ApiRequest{
   failNotSingular crMedia resultSet
   failExceedsMaxAffectedPref (preferMaxAffected,preferHandling) resultSet
   pure $ DbCallResult plan resultSet
-
-actionQuery (MaybeDb plan@InspectPlan{ipSchema=tSchema}) AppConfig{..} _ pgVer sCache =
-  lift $ case configOpenApiMode of
-    OAFollowPriv -> do
-      tableAccess <- SQL.statement [tSchema] (SchemaCache.accessibleTables pgVer configDbPreparedStatements)
-      MaybeDbResult plan . Just <$> ((,,)
-            (HM.filterWithKey (\qi _ -> S.member qi tableAccess) $ SchemaCache.dbTables sCache)
-        <$> SQL.statement (tSchema, configDbHoistedTxSettings) (SchemaCache.accessibleFuncs pgVer configDbPreparedStatements)
-        <*> SQL.statement tSchema (SchemaCache.schemaDescription configDbPreparedStatements))
-    OAIgnorePriv ->
-      MaybeDbResult plan . Just <$> ((,,)
-            (HM.filterWithKey (\(QualifiedIdentifier sch _) _ ->  sch == tSchema) $ SchemaCache.dbTables sCache)
-            (HM.filterWithKey (\(QualifiedIdentifier sch _) _ ->  sch == tSchema) $ SchemaCache.dbRoutines sCache)
-        <$> SQL.statement tSchema (SchemaCache.schemaDescription configDbPreparedStatements))
-    OADisabled ->
-      pure $ MaybeDbResult plan Nothing
 
 resultSetWTotal :: AppConfig -> ApiRequest -> ResultSet -> SQL.Snippet -> DbHandler ResultSet
 resultSetWTotal _ _ rs@RSPlan{} _ = return rs

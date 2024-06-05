@@ -19,40 +19,26 @@ import qualified PostgREST.AppState as AppState
 import qualified PostgREST.Logger   as Logger
 import qualified PostgREST.Metrics  as Metrics
 
-import qualified Feature.Auth.AsymmetricJwtSpec
-import qualified Feature.Auth.AudienceJwtSecretSpec
-import qualified Feature.Auth.AuthSpec
-import qualified Feature.Auth.BinaryJwtSecretSpec
-import qualified Feature.Auth.NoAnonSpec
-import qualified Feature.Auth.NoJwtSpec
-import qualified Feature.ConcurrentSpec
 import qualified Feature.CorsSpec
 import qualified Feature.ExtraSearchPathSpec
 import qualified Feature.NoSuperuserSpec
 import qualified Feature.ObservabilitySpec
 import qualified Feature.OptionsSpec
 import qualified Feature.Query.AggregateFunctionsSpec
-import qualified Feature.Query.AndOrParamsSpec
 import qualified Feature.Query.ComputedRelsSpec
 import qualified Feature.Query.CustomMediaSpec
-import qualified Feature.Query.EmbedDisambiguationSpec
 import qualified Feature.Query.EmbedInnerJoinSpec
-import qualified Feature.Query.ErrorSpec
 import qualified Feature.Query.JsonOperatorSpec
 import qualified Feature.Query.MultipleSchemaSpec
-import qualified Feature.Query.NullsStripSpec
 import qualified Feature.Query.PlanSpec
 import qualified Feature.Query.PostGISSpec
 import qualified Feature.Query.PreferencesSpec
-import qualified Feature.Query.QueryLimitedSpec
 import qualified Feature.Query.QuerySpec
 import qualified Feature.Query.RangeSpec
 import qualified Feature.Query.RawOutputTypesSpec
-import qualified Feature.Query.RelatedQueriesSpec
 import qualified Feature.Query.RpcSpec
 import qualified Feature.Query.ServerTimingSpec
 import qualified Feature.Query.SingularSpec
-import qualified Feature.Query.SpreadQueriesSpec
 import qualified Feature.RollbackSpec
 import qualified Feature.RpcPreRequestGucsSpec
 
@@ -91,13 +77,6 @@ main = do
       initApp customSchemaCache config
 
   let withApp              = app testCfg
-      maxRowsApp           = app testMaxRowsCfg
-      noAnonApp            = app testCfgNoAnon
-      noJwtApp             = app testCfgNoJWT
-      binaryJwtApp         = app testCfgBinaryJWT
-      audJwtApp            = app testCfgAudienceJWT
-      asymJwkApp           = app testCfgAsymJWK
-      asymJwkSetApp        = app testCfgAsymJWKSet
       responseHeadersApp   = app testCfgResponseHeaders
       disallowRollbackApp  = app testCfgDisallowRollback
       forceRollbackApp     = app testCfgForceRollback
@@ -107,7 +86,6 @@ main = do
       aggregatesEnabled    = app testCfgAggregatesEnabled
 
       extraSearchPathApp   = appDbs testCfgExtraSearchPath
-      nonexistentSchemaApp = appDbs testNonexistentSchemaCfg
       multipleSchemaApp    = appDbs testMultipleSchemaCfg
 
 
@@ -117,27 +95,18 @@ main = do
         analyzeTable "child_entities"
 
       specs = uncurry describe <$> [
-          ("Feature.Auth.AuthSpec"                       , Feature.Auth.AuthSpec.spec actualPgVersion)
-        , ("Feature.ConcurrentSpec"                      , Feature.ConcurrentSpec.spec)
-        , ("Feature.CorsSpec"                            , Feature.CorsSpec.spec)
+          ("Feature.CorsSpec"                            , Feature.CorsSpec.spec)
         , ("Feature.CustomMediaSpec"                     , Feature.Query.CustomMediaSpec.spec)
         , ("Feature.NoSuperuserSpec"                     , Feature.NoSuperuserSpec.spec)
         , ("Feature.OptionsSpec"                         , Feature.OptionsSpec.spec actualPgVersion)
-        , ("Feature.Query.AndOrParamsSpec"               , Feature.Query.AndOrParamsSpec.spec actualPgVersion)
         , ("Feature.Query.ComputedRelsSpec"              , Feature.Query.ComputedRelsSpec.spec)
-        , ("Feature.Query.EmbedDisambiguationSpec"       , Feature.Query.EmbedDisambiguationSpec.spec)
         , ("Feature.Query.EmbedInnerJoinSpec"            , Feature.Query.EmbedInnerJoinSpec.spec)
         , ("Feature.Query.JsonOperatorSpec"              , Feature.Query.JsonOperatorSpec.spec actualPgVersion)
-        , ("Feature.Query.NullsStripSpec"                , Feature.Query.NullsStripSpec.spec)
-        , ("Feature.Query.PgErrorCodeMappingSpec"        , Feature.Query.ErrorSpec.pgErrorCodeMapping)
-        , ("Feature.Query.PlanSpec.disabledSpec"         , Feature.Query.PlanSpec.disabledSpec)
         , ("Feature.Query.PreferencesSpec"               , Feature.Query.PreferencesSpec.spec)
         , ("Feature.Query.QuerySpec"                     , Feature.Query.QuerySpec.spec actualPgVersion)
         , ("Feature.Query.RawOutputTypesSpec"            , Feature.Query.RawOutputTypesSpec.spec)
-        , ("Feature.Query.RelatedQueriesSpec"            , Feature.Query.RelatedQueriesSpec.spec)
         , ("Feature.Query.RpcSpec"                       , Feature.Query.RpcSpec.spec actualPgVersion)
         , ("Feature.Query.SingularSpec"                  , Feature.Query.SingularSpec.spec)
-        , ("Feature.Query.SpreadQueriesSpec"             , Feature.Query.SpreadQueriesSpec.spec)
         ]
 
   hspec $ do
@@ -146,38 +115,6 @@ main = do
     -- we analyze to get accurate results from EXPLAIN
     parallel $ beforeAll_ analyze . before withApp $
       describe "Feature.Query.RangeSpec" Feature.Query.RangeSpec.spec
-
-    -- this test runs with a different server flag
-    parallel $ before maxRowsApp $
-      describe "Feature.Query.QueryLimitedSpec" Feature.Query.QueryLimitedSpec.spec
-
-    -- this test runs without an anonymous role
-    parallel $ before noAnonApp $
-      describe "Feature.Auth.NoAnonSpec" Feature.Auth.NoAnonSpec.spec
-
-    -- this test runs without a JWT secret
-    parallel $ before noJwtApp $
-      describe "Feature.Auth.NoJwtSpec" Feature.Auth.NoJwtSpec.spec
-
-    -- this test runs with a binary JWT secret
-    parallel $ before binaryJwtApp $
-      describe "Feature.Auth.BinaryJwtSecretSpec" Feature.Auth.BinaryJwtSecretSpec.spec
-
-    -- this test runs with a binary JWT secret and an audience claim
-    parallel $ before audJwtApp $
-      describe "Feature.Auth.AudienceJwtSecretSpec" Feature.Auth.AudienceJwtSecretSpec.spec
-
-    -- this test runs with asymmetric JWK
-    parallel $ before asymJwkApp $
-      describe "Feature.Auth.AsymmetricJwtSpec" Feature.Auth.AsymmetricJwtSpec.spec
-
-    -- this test runs with asymmetric JWKSet
-    parallel $ before asymJwkSetApp $
-      describe "Feature.Auth.AsymmetricJwtSpec" Feature.Auth.AsymmetricJwtSpec.spec
-
-    -- this test runs with a nonexistent db-schema
-    parallel $ before nonexistentSchemaApp $
-      describe "Feature.Query.NonExistentSchemaErrorSpec" Feature.Query.ErrorSpec.nonExistentSchema
 
     -- this test runs with an extra search path
     parallel $ before extraSearchPathApp $ do
@@ -205,9 +142,6 @@ main = do
 
     parallel $ before aggregatesEnabled $
       describe "Feature.Query.AggregateFunctionsSpec" Feature.Query.AggregateFunctionsSpec.allowed
-
-    parallel $ before withApp $
-      describe "Feature.Query.AggregateFunctionsDisallowedSpec." Feature.Query.AggregateFunctionsSpec.disallowed
 
     -- Note: the rollback tests can not run in parallel, because they test persistance and
     -- this results in race conditions

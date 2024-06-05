@@ -57,11 +57,6 @@ cli:
     use_defaultenv: true
     env:
       PGRST_DB_TX_END: random
-  - name: invalid openapi-server-proxy-uri
-    expect: error
-    use_defaultenv: true
-    env:
-      PGRST_OPENAPI_SERVER_PROXY_URI: 'htp:/@@localhorst.invalid'
   - name: invalid jwt-secret not base64
     expect: error
     use_defaultenv: true
@@ -160,11 +155,6 @@ invalidroleclaimkeys:
   - '.my_role;;domain'
   - '.#$$%&$%/'
   - '1234'
-
-invalidopenapimodes:
-  - 'follow-'
-  - 'ignore-'
-  - '.#$$%&$%/'
 
 invalidjointypes:
   - 'left!'

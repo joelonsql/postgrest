@@ -16,7 +16,6 @@ module PostgREST.Config
   , JSPath
   , JSPathExp(..)
   , LogLevel(..)
-  , OpenAPIMode(..)
   , Proxy(..)
   , toText
   , isMalformedProxyUri
@@ -99,9 +98,6 @@ data AppConfig = AppConfig
   , configJwtSecretIsBase64        :: Bool
   , configJwtCacheMaxLifetime      :: Int
   , configLogLevel                 :: LogLevel
-  , configOpenApiMode              :: OpenAPIMode
-  , configOpenApiSecurityActive    :: Bool
-  , configOpenApiServerProxyUri    :: Maybe Text
   , configServerCorsAllowedOrigins :: Maybe [Text]
   , configServerHost               :: Text
   , configServerPort               :: Int
@@ -125,15 +121,6 @@ dumpLogLevel = \case
   LogWarn  -> "warn"
   LogInfo  -> "info"
   LogDebug -> "debug"
-
-data OpenAPIMode = OAFollowPriv | OAIgnorePriv | OADisabled
-  deriving Eq
-
-dumpOpenApiMode :: OpenAPIMode -> Text
-dumpOpenApiMode = \case
-  OAFollowPriv -> "follow-privileges"
-  OAIgnorePriv -> "ignore-privileges"
-  OADisabled   -> "disabled"
 
 -- | Dump the config
 toText :: AppConfig -> Text
@@ -169,9 +156,6 @@ toText conf =
       ,("jwt-secret-is-base64",          T.toLower . show . configJwtSecretIsBase64)
       ,("jwt-cache-max-lifetime",                   show . configJwtCacheMaxLifetime)
       ,("log-level",                 q . dumpLogLevel . configLogLevel)
-      ,("openapi-mode",              q . dumpOpenApiMode . configOpenApiMode)
-      ,("openapi-security-active",       T.toLower . show . configOpenApiSecurityActive)
-      ,("openapi-server-proxy-uri",  q . fromMaybe mempty . configOpenApiServerProxyUri)
       ,("server-cors-allowed-origins",      q . maybe "" (T.intercalate ",") . configServerCorsAllowedOrigins)
       ,("server-host",               q . configServerHost)
       ,("server-port",                   show . configServerPort)
@@ -275,9 +259,6 @@ parser optPath env dbSettings roleSettings roleIsolationLvl =
           (optBool "secret-is-base64"))
     <*> (fromMaybe 0 <$> optInt "jwt-cache-max-lifetime")
     <*> parseLogLevel "log-level"
-    <*> parseOpenAPIMode "openapi-mode"
-    <*> (fromMaybe False <$> optBool "openapi-security-active")
-    <*> parseOpenAPIServerProxyURI "openapi-server-proxy-uri"
     <*> parseCORSAllowedOrigins "server-cors-allowed-origins"
     <*> (fromMaybe "!4" <$> optString "server-host")
     <*> (fromMaybe 3000 <$> optInt "server-port")
@@ -309,22 +290,6 @@ parser optPath env dbSettings roleSettings roleIsolationLvl =
               if fileMode < 384 || fileMode > 511
                 then fail "Invalid server-unix-socket-mode: needs to be between 600 and 777"
                 else pure fileMode
-
-    parseOpenAPIMode :: C.Key -> C.Parser C.Config OpenAPIMode
-    parseOpenAPIMode k =
-      optString k >>= \case
-        Nothing                  -> pure OAFollowPriv
-        Just "follow-privileges" -> pure OAFollowPriv
-        Just "ignore-privileges" -> pure OAIgnorePriv
-        Just "disabled"          -> pure OADisabled
-        Just _                   -> fail "Invalid openapi-mode. Check your configuration."
-
-    parseOpenAPIServerProxyURI :: C.Key -> C.Parser C.Config (Maybe Text)
-    parseOpenAPIServerProxyURI k =
-      optString k >>= \case
-        Nothing                            -> pure Nothing
-        Just val | isMalformedProxyUri val -> fail "Malformed proxy uri, a correct example: https://example.com:8443/basePath"
-                 | otherwise               -> pure $ Just val
 
     parseJwtAudience :: C.Key -> C.Parser C.Config (Maybe StringOrURI)
     parseJwtAudience k =

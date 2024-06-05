@@ -45,8 +45,7 @@ import Web.Cookie                (parseCookies)
 import PostgREST.ApiRequest.QueryParams  (QueryParams (..))
 import PostgREST.ApiRequest.Types        (ApiRequestError (..),
                                           RangeError (..))
-import PostgREST.Config                  (AppConfig (..),
-                                          OpenAPIMode (..))
+import PostgREST.Config                  (AppConfig (..))
 import PostgREST.MediaType               (MediaType (..))
 import PostgREST.RangeQuery              (NonnegRange, allRange,
                                           convertToLimitZeroRange,
@@ -86,18 +85,15 @@ data InvokeMethod = Inv | InvRead Bool  deriving Eq
 data Resource
   = ResourceRelation Text
   | ResourceRoutine Text
-  | ResourceSchema
 
 data DbAction
   = ActRelationRead {dbActQi :: QualifiedIdentifier, actHeadersOnly :: Bool}
   | ActRoutine      {dbActQi :: QualifiedIdentifier, actInvMethod :: InvokeMethod}
-  | ActSchemaRead   Schema Bool
 
 data Action
   = ActDb           DbAction
   | ActRelationInfo QualifiedIdentifier
   | ActRoutineInfo  QualifiedIdentifier InvokeMethod
-  | ActSchemaInfo
 
 {-|
   Describes what the user wants to do. This data type is a
@@ -160,12 +156,7 @@ userApiRequest conf req reqBody sCache = do
     actIsInvokeSafe x = case x of {ActDb (ActRoutine _  (InvRead _)) -> True; _ -> False}
 
 getResource :: AppConfig -> [Text] -> Either ApiRequestError Resource
-getResource AppConfig{configOpenApiMode, configDbRootSpec} = \case
-  []             -> case configDbRootSpec of
-                      Just (QualifiedIdentifier _ pathName)     -> Right $ ResourceRoutine pathName
-                      Nothing | configOpenApiMode == OADisabled -> Left NotFound
-                              | otherwise                       -> Right ResourceSchema
-  [table]        -> Right $ ResourceRelation table
+getResource AppConfig{} = \case
   ["rpc", pName] -> Right $ ResourceRoutine pName
   _              -> Left NotFound
 
@@ -181,10 +172,6 @@ getAction resource schema method =
     (ResourceRelation rel, "HEAD")    -> Right . ActDb $ ActRelationRead (qi rel) True
     (ResourceRelation rel, "GET")     -> Right . ActDb $ ActRelationRead (qi rel) False
     (ResourceRelation rel, "OPTIONS") -> Right $ ActRelationInfo (qi rel)
-
-    (ResourceSchema, "HEAD")          -> Right . ActDb $ ActSchemaRead schema True
-    (ResourceSchema, "GET")           -> Right . ActDb $ ActSchemaRead schema False
-    (ResourceSchema, "OPTIONS")       -> Right ActSchemaInfo
 
     _                                 -> Left $ UnsupportedMethod method
   where

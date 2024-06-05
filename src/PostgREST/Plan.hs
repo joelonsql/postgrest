@@ -19,7 +19,6 @@ module PostgREST.Plan
   ( actionPlan
   , ActionPlan(..)
   , DbActionPlan(..)
-  , InspectPlan(..)
   , InfoPlan(..)
   , CrudPlan(..)
   , CallReadPlan(..)
@@ -110,14 +109,7 @@ data CallReadPlan = CallReadPlan {
   , crQi       :: QualifiedIdentifier
   }
 
-data InspectPlan = InspectPlan {
-    ipMedia    :: MediaType
-  , ipTxmode   :: SQL.Mode
-  , ipHdrsOnly :: Bool
-  , ipSchema   :: Schema
-  }
-
-data DbActionPlan = DbCrud CrudPlan | DbCall CallReadPlan | MaybeDb InspectPlan
+data DbActionPlan = DbCrud CrudPlan | DbCall CallReadPlan
 data InfoPlan     = RelInfoPlan QualifiedIdentifier | RoutineInfoPlan CallReadPlan | SchemaInfoPlan
 data ActionPlan   = Db DbActionPlan | NoDb InfoPlan
 
@@ -126,7 +118,6 @@ actionPlan act conf apiReq sCache = case act of
     ActDb dbAct              -> Db <$> dbActionPlan dbAct conf apiReq sCache
     ActRelationInfo ident    -> pure . NoDb $ RelInfoPlan ident
     ActRoutineInfo ident inv -> NoDb . RoutineInfoPlan <$> callReadPlan ident conf sCache apiReq inv
-    ActSchemaInfo            -> pure $ NoDb SchemaInfoPlan
 
 dbActionPlan :: DbAction -> AppConfig -> ApiRequest -> SchemaCache -> Either Error DbActionPlan
 dbActionPlan dbAct conf apiReq sCache = case dbAct of
@@ -134,8 +125,6 @@ dbActionPlan dbAct conf apiReq sCache = case dbAct of
     DbCrud <$> wrappedReadPlan identifier conf sCache apiReq headersOnly
   ActRoutine identifier invMethod ->
     DbCall <$> callReadPlan identifier conf sCache apiReq invMethod
-  ActSchemaRead tSchema headersOnly ->
-    MaybeDb <$> inspectPlan apiReq headersOnly tSchema
 
 wrappedReadPlan :: QualifiedIdentifier -> AppConfig -> SchemaCache -> ApiRequest -> Bool -> Either Error CrudPlan
 wrappedReadPlan  identifier conf sCache apiRequest@ApiRequest{iPreferences=Preferences{..},..} headersOnly = do
@@ -172,15 +161,6 @@ callReadPlan identifier conf sCache apiRequest@ApiRequest{iPreferences=Preferenc
 hasDefaultSelect :: ReadPlanTree -> Bool
 hasDefaultSelect (Node ReadPlan{select=[CoercibleSelectField{csField=CoercibleField{cfName}}]} []) = cfName == "*"
 hasDefaultSelect _ = False
-
-inspectPlan :: ApiRequest -> Bool -> Schema -> Either Error InspectPlan
-inspectPlan apiRequest headersOnly schema = do
-  let producedMTs = [MTOpenAPI, MTApplicationJSON, MTAny]
-      accepts     = iAcceptMediaType apiRequest
-  mediaType <- if not . null $ L.intersect accepts producedMTs
-    then Right MTOpenAPI
-    else Left . ApiRequestError . MediaTypeError $ MediaType.toMime <$> accepts
-  return $ InspectPlan mediaType SQL.Read headersOnly schema
 
 {-|
   Search a pg proc by matching name and arguments keys to parameters. Since a function can be overloaded,

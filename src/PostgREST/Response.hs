@@ -111,8 +111,6 @@ actionResponse (DbCallResult CallReadPlan{crMedia, crInvMthd=invMethod, crProc=p
   RSPlan plan ->
     Right $ PgrstResponse HTTP.status200 (contentTypeHeaders crMedia ctxApiRequest) $ LBS.fromStrict plan
 
-actionResponse (MaybeDbResult _ _) _ _ _ _ _ _ = Left $ Error.ApiRequestError ApiRequestTypes.NotFound
-
 actionResponse (NoDbResult (RelInfoPlan identifier)) _ _ _ sCache _ _ =
   case HM.lookup identifier (dbTables sCache) of
     Just tbl -> respondInfo $ allowH tbl

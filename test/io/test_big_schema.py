@@ -34,24 +34,6 @@ def test_requests_wait_for_schema_cache_reload(defaultenv):
         assert plan_dur > 10000.0
 
 
-# TODO: This test fails now because of https://github.com/PostgREST/postgrest/pull/2122
-# The stack size of 1K(-with-rtsopts=-K1K) is not enough and this fails with "stack overflow"
-# A stack size of 200K seems to be enough for succeess
-@pytest.mark.skip
-def test_openapi_in_big_schema(defaultenv):
-    "Should get a successful response from openapi on a big schema"
-
-    env = {
-        **defaultenv,
-        "PGRST_DB_SCHEMAS": "apflora",
-        "PGRST_OPENAPI_MODE": "ignore-privileges",
-    }
-
-    with run(env=env) as postgrest:
-        response = postgrest.session.get("/")
-        assert response.status_code == 200
-
-
 # See: https://github.com/PostgREST/postgrest/issues/3329
 def test_should_not_fail_with_stack_overflow(defaultenv):
     "requesting a non-existent relationship should not fail with stack overflow due to fuzzy search of candidates"

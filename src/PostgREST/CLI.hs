@@ -207,13 +207,6 @@ exampleConfigFile =
       |## Logging level, the admitted values are: crit, error, warn, info and debug.
       |log-level = "error"
       |
-      |## Determine if the OpenAPI output should follow or ignore role privileges or be disabled entirely.
-      |## Admitted values: follow-privileges, ignore-privileges, disabled
-      |openapi-mode = "follow-privileges"
-      |
-      |## Base url for the OpenAPI output
-      |openapi-server-proxy-uri = ""
-      |
       |## Configurable CORS origins
       |# server-cors-allowed-origins = ""
       |

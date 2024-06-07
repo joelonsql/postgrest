@@ -87,8 +87,7 @@ data Resource
   | ResourceRoutine Text
 
 data DbAction
-  = ActRelationRead {dbActQi :: QualifiedIdentifier, actHeadersOnly :: Bool}
-  | ActRoutine      {dbActQi :: QualifiedIdentifier, actInvMethod :: InvokeMethod}
+  = ActRoutine      {dbActQi :: QualifiedIdentifier, actInvMethod :: InvokeMethod}
 
 data Action
   = ActDb           DbAction
@@ -169,8 +168,6 @@ getAction resource schema method =
     (ResourceRoutine rout, "OPTIONS") -> Right $ ActRoutineInfo (qi rout) $ InvRead True
     (ResourceRoutine _, _)            -> Left $ InvalidRpcMethod method
 
-    (ResourceRelation rel, "HEAD")    -> Right . ActDb $ ActRelationRead (qi rel) True
-    (ResourceRelation rel, "GET")     -> Right . ActDb $ ActRelationRead (qi rel) False
     (ResourceRelation rel, "OPTIONS") -> Right $ ActRelationInfo (qi rel)
 
     _                                 -> Left $ UnsupportedMethod method

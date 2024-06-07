@@ -14,7 +14,6 @@ import qualified Data.ByteString.Lazy.Char8        as LBS
 import           Data.Either.Combinators           (mapLeft)
 import qualified Data.HashMap.Strict               as HM
 import qualified Hasql.Decoders                    as HD
-import qualified Hasql.DynamicStatements.Snippet   as SQL (Snippet)
 import qualified Hasql.DynamicStatements.Statement as SQL
 import qualified Hasql.Transaction                 as SQL
 import qualified Hasql.Transaction.Sessions        as SQL
@@ -26,8 +25,7 @@ import qualified PostgREST.Query.QueryBuilder as QueryBuilder
 import qualified PostgREST.Query.Statements   as Statements
 
 import PostgREST.ApiRequest              (ApiRequest (..))
-import PostgREST.ApiRequest.Preferences  (PreferCount (..),
-                                          PreferHandling (..),
+import PostgREST.ApiRequest.Preferences  (PreferHandling (..),
                                           PreferMaxAffected (..),
                                           PreferTimezone (..),
                                           PreferTransaction (..),
@@ -40,7 +38,6 @@ import PostgREST.Error                   (Error)
 import PostgREST.MediaType               (MediaType (..))
 import PostgREST.Plan                    (ActionPlan (..),
                                           CallReadPlan (..),
-                                          CrudPlan (..),
                                           DbActionPlan (..),
                                           InfoPlan (..))
 import PostgREST.Query.SqlFragment       (escapeIdentList, fromQi,
@@ -57,8 +54,7 @@ import Protolude hiding (Handler)
 type DbHandler = ExceptT Error SQL.Transaction
 
 data QueryResult
-  = DbCrudResult  CrudPlan ResultSet
-  | DbCallResult  CallReadPlan  ResultSet
+  = DbCallResult  CallReadPlan  ResultSet
   | NoDbResult    InfoPlan
 
 -- TODO This function needs to be free from IO, only App.hs should do IO
@@ -84,37 +80,15 @@ runQuery appState config AuthResult{..} apiReq (Db plan) sCache pgVer authentica
         actionQuery plan config apiReq pgVer sCache
 
 planTxMode :: DbActionPlan -> SQL.Mode
-planTxMode (DbCrud x)  = pTxMode x
 planTxMode (DbCall x)  = crTxMode x
 
 planIsoLvl :: AppConfig -> ByteString -> DbActionPlan -> SQL.IsolationLevel
 planIsoLvl AppConfig{configRoleIsoLvl} role actPlan = case actPlan of
   DbCall CallReadPlan{crProc} -> fromMaybe roleIsoLvl $ pdIsoLvl crProc
-  _                           -> roleIsoLvl
   where
     roleIsoLvl = HM.findWithDefault SQL.ReadCommitted role configRoleIsoLvl
 
 actionQuery :: DbActionPlan -> AppConfig -> ApiRequest -> PgVersion -> SchemaCache -> DbHandler QueryResult
-
-actionQuery (DbCrud plan@WrappedReadPlan{..}) conf@AppConfig{..} apiReq@ApiRequest{iPreferences=Preferences{..}} _ _ = do
-  let countQuery = QueryBuilder.readPlanToCountQuery wrReadPlan
-  resultSet <-
-     lift . SQL.statement mempty $
-      Statements.prepareRead
-        (QueryBuilder.readPlanToQuery wrReadPlan)
-        (if preferCount == Just EstimatedCount then
-           -- LIMIT maxRows + 1 so we can determine below that maxRows was surpassed
-           QueryBuilder.limitedQuery countQuery ((+ 1) <$> configDbMaxRows)
-         else
-           countQuery
-        )
-        (shouldCount preferCount)
-        wrMedia
-        wrHandler
-        configDbPreparedStatements
-  failNotSingular wrMedia resultSet
-  optionalRollback conf apiReq
-  DbCrudResult plan <$> resultSetWTotal conf apiReq resultSet countQuery
 
 actionQuery (DbCall plan@CallReadPlan{..}) conf@AppConfig{..} apiReq@ApiRequest{iPreferences=Preferences{..}} pgVer _ = do
   resultSet <-
@@ -133,28 +107,6 @@ actionQuery (DbCall plan@CallReadPlan{..}) conf@AppConfig{..} apiReq@ApiRequest{
   failNotSingular crMedia resultSet
   failExceedsMaxAffectedPref (preferMaxAffected,preferHandling) resultSet
   pure $ DbCallResult plan resultSet
-
-resultSetWTotal :: AppConfig -> ApiRequest -> ResultSet -> SQL.Snippet -> DbHandler ResultSet
-resultSetWTotal _ _ rs@RSPlan{} _ = return rs
-resultSetWTotal AppConfig{..} ApiRequest{iPreferences=Preferences{..}} rs@RSStandard{rsTableTotal=tableTotal} countQuery =
-  case preferCount of
-    Just PlannedCount -> do
-      total <- explain
-      return rs{rsTableTotal=total}
-    Just EstimatedCount ->
-      if tableTotal > (fromIntegral <$> configDbMaxRows) then do
-        total <- max tableTotal <$> explain
-        return rs{rsTableTotal=total}
-      else
-        return rs
-    Just ExactCount ->
-      return rs
-    Nothing ->
-      return rs
-  where
-    explain =
-      lift . SQL.statement mempty . Statements.preparePlanRows countQuery $
-        configDbPreparedStatements
 
 -- |
 -- Fail a response if a single JSON object was requested and not exactly one
@@ -209,7 +161,6 @@ setPgLocals dbActPlan AppConfig{..} claims role ApiRequest{..} = lift $
       setConfigWithConstantName ("search_path", schemas)
     funcSettings = case dbActPlan of
       DbCall CallReadPlan{crProc} -> pdFuncSettings crProc
-      _                           -> mempty
 
 -- | Runs the pre-request function.
 runPreReq :: AppConfig -> DbHandler ()

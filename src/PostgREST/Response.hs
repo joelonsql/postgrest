@@ -25,18 +25,15 @@ import PostgREST.ApiRequest              (ApiRequest (..),
                                           InvokeMethod (..))
 import PostgREST.ApiRequest.Preferences  (Preferences (..),
                                           prefAppliedHeader)
-import PostgREST.ApiRequest.QueryParams  (QueryParams (..))
 import PostgREST.Config                  (AppConfig (..))
 import PostgREST.MediaType               (MediaType (..))
 import PostgREST.Plan                    (CallReadPlan (..),
-                                          CrudPlan (..),
                                           InfoPlan (..))
 import PostgREST.Query                   (QueryResult (..))
 import PostgREST.Query.Statements        (ResultSet (..))
 import PostgREST.Response.GucHeader      (GucHeader, unwrapGucHeader)
 import PostgREST.SchemaCache             (SchemaCache (..))
-import PostgREST.SchemaCache.Identifiers (QualifiedIdentifier (..),
-                                          Schema)
+import PostgREST.SchemaCache.Identifiers (Schema)
 import PostgREST.SchemaCache.Routine     (FuncVolatility (..),
                                           Routine (..))
 import PostgREST.SchemaCache.Table       (Table (..))
@@ -54,35 +51,6 @@ data PgrstResponse = PgrstResponse {
 }
 
 actionResponse :: QueryResult -> ApiRequest -> (Text, Text) -> AppConfig -> SchemaCache -> Schema -> Bool -> Either Error.Error PgrstResponse
-
-actionResponse (DbCrudResult WrappedReadPlan{wrMedia, wrHdrsOnly=headersOnly, crudQi=identifier} resultSet) ctxApiRequest@ApiRequest{iPreferences=Preferences{..},..} _ _ _ _ _ =
-  case resultSet of
-    RSStandard{..} -> do
-      let
-        (status, contentRange) = RangeQuery.rangeStatusHeader iTopLevelRange rsQueryTotal rsTableTotal
-        prefHeader = maybeToList . prefAppliedHeader $ Preferences Nothing Nothing Nothing preferCount preferTransaction Nothing preferHandling preferTimezone Nothing []
-        headers =
-          [ contentRange
-          , ( "Content-Location"
-            , "/"
-                <> toUtf8 (qiName identifier)
-                <> if BS.null (qsCanonical iQueryParams) then mempty else "?" <> qsCanonical iQueryParams
-            )
-          ]
-          ++ contentTypeHeaders wrMedia ctxApiRequest
-          ++ prefHeader
-
-      (ovStatus, ovHeaders) <- overrideStatusHeaders rsGucStatus rsGucHeaders status headers
-
-      let bod | status == HTTP.status416 = Error.errorPayload $ Error.ApiRequestError $ ApiRequestTypes.InvalidRange $
-                                           ApiRequestTypes.OutOfBounds (show $ RangeQuery.rangeOffset iTopLevelRange) (maybe "0" show rsTableTotal)
-              | headersOnly              = mempty
-              | otherwise                = LBS.fromStrict rsBody
-
-      Right $ PgrstResponse ovStatus ovHeaders bod
-
-    RSPlan plan ->
-      Right $ PgrstResponse HTTP.status200 (contentTypeHeaders wrMedia ctxApiRequest) $ LBS.fromStrict plan
 
 actionResponse (DbCallResult CallReadPlan{crMedia, crInvMthd=invMethod, crProc=proc} resultSet) ctxApiRequest@ApiRequest{iPreferences=Preferences{..},..} _ _ _ _ _ = case resultSet of
   RSStandard {..} -> do

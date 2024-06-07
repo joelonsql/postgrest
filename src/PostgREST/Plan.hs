@@ -20,7 +20,6 @@ module PostgREST.Plan
   , ActionPlan(..)
   , DbActionPlan(..)
   , InfoPlan(..)
-  , CrudPlan(..)
   , CallReadPlan(..)
   ) where
 
@@ -88,16 +87,6 @@ import Protolude hiding (from)
 -- Setup for doctests
 -- >>> import Data.Ranged.Ranges (fullRange)
 
-data CrudPlan
-  = WrappedReadPlan
-  { wrReadPlan :: ReadPlanTree
-  , pTxMode    :: SQL.Mode
-  , wrHandler  :: MediaHandler
-  , wrMedia    :: MediaType
-  , wrHdrsOnly :: Bool
-  , crudQi     :: QualifiedIdentifier
-  }
-
 data CallReadPlan = CallReadPlan {
     crReadPlan :: ReadPlanTree
   , crCallPlan :: CallPlan
@@ -109,7 +98,7 @@ data CallReadPlan = CallReadPlan {
   , crQi       :: QualifiedIdentifier
   }
 
-data DbActionPlan = DbCrud CrudPlan | DbCall CallReadPlan
+data DbActionPlan = DbCall CallReadPlan
 data InfoPlan     = RelInfoPlan QualifiedIdentifier | RoutineInfoPlan CallReadPlan | SchemaInfoPlan
 data ActionPlan   = Db DbActionPlan | NoDb InfoPlan
 
@@ -121,17 +110,8 @@ actionPlan act conf apiReq sCache = case act of
 
 dbActionPlan :: DbAction -> AppConfig -> ApiRequest -> SchemaCache -> Either Error DbActionPlan
 dbActionPlan dbAct conf apiReq sCache = case dbAct of
-  ActRelationRead identifier headersOnly ->
-    DbCrud <$> wrappedReadPlan identifier conf sCache apiReq headersOnly
   ActRoutine identifier invMethod ->
     DbCall <$> callReadPlan identifier conf sCache apiReq invMethod
-
-wrappedReadPlan :: QualifiedIdentifier -> AppConfig -> SchemaCache -> ApiRequest -> Bool -> Either Error CrudPlan
-wrappedReadPlan  identifier conf sCache apiRequest@ApiRequest{iPreferences=Preferences{..},..} headersOnly = do
-  rPlan <- readPlan identifier conf sCache apiRequest
-  (handler, mediaType)  <- mapLeft ApiRequestError $ negotiateContent conf apiRequest identifier iAcceptMediaType (dbMediaHandlers sCache) (hasDefaultSelect rPlan)
-  if not (null invalidPrefs) && preferHandling == Just Strict then Left $ ApiRequestError $ InvalidPreferences invalidPrefs else Right ()
-  return $ WrappedReadPlan rPlan SQL.Read handler mediaType headersOnly identifier
 
 callReadPlan :: QualifiedIdentifier -> AppConfig -> SchemaCache -> ApiRequest -> InvokeMethod -> Either Error CallReadPlan
 callReadPlan identifier conf sCache apiRequest@ApiRequest{iPreferences=Preferences{..},..} invMethod = do
@@ -681,7 +661,6 @@ addFilters ctx ApiRequest{..} rReq =
     QueryParams.QueryParams{..} = iQueryParams
     flts =
       case iAction of
-        ActDb (ActRelationRead _  _) -> qsFilters
         ActDb (ActRoutine _ _)       -> qsFilters
         _                            -> qsFiltersNotRoot
 
@@ -935,7 +914,6 @@ negotiateContent conf ApiRequest{iAction=act} identifier accepts produces defaul
     (_, Nothing)                                             -> Left . MediaTypeError $ map MediaType.toMime accepts
     -- no need for an aggregate on HEAD https://github.com/PostgREST/postgrest/issues/2849
     -- TODO: despite no aggregate, these are responding with a Content-Type, which is not correct.
-    (ActDb (ActRelationRead _ True),             Just (_, mt)) -> Right (NoAgg, mt)
     (ActDb (ActRoutine  _ (InvRead True)), Just (_, mt))             -> Right (NoAgg, mt)
     (_, Just (x, mt))                                        -> Right (x, mt)
   where

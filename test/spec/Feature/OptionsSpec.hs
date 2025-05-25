@@ -93,11 +93,6 @@ spec = describe "Allow header" $ do
         simpleHeaders r `shouldSatisfy`
           matchHeader "Allow" "OPTIONS,GET,HEAD,POST"
 
-    it "includes the GET/HEAD/POST method for a immutable function" $ do
-      r <- request methodOptions "/rpc/jwt_test" [] ""
-      liftIO $
-        simpleHeaders r `shouldSatisfy`
-          matchHeader "Allow" "OPTIONS,GET,HEAD,POST"
 
   context "root endpoint" $ do
     it "includes the GET/HEAD method " $ do

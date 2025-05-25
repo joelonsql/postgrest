@@ -33,13 +33,6 @@ SET search_path = public, pg_catalog;
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
---
--- Name: jwt_token; Type: TYPE; Schema: public; Owner: -
---
-
-CREATE TYPE public.jwt_token AS (
-	token text
-);
 
 
 SET search_path = test, pg_catalog;
@@ -82,7 +75,7 @@ CREATE FUNCTION set_authors_only_owner() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 begin
-  NEW.owner = current_setting('request.jwt.claims')::json->>'id';
+  NEW.owner = 'anonymous';
   RETURN NEW;
 end
 $$;
@@ -229,23 +222,6 @@ CREATE FUNCTION noparamsproc() RETURNS text
 		SELECT a FROM (VALUES ('Return value of no parameters procedure.')) s(a);
 	$$;
 
---
--- Name: login(text, text); Type: FUNCTION; Schema: test; Owner: -
---
-
-CREATE FUNCTION login(id text, pass text) RETURNS public.jwt_token
-    LANGUAGE sql SECURITY DEFINER
-    STABLE
-    AS $$
-SELECT jwt.sign(
-    row_to_json(r), 'reallyreallyreallyreallyverysafe'
-  ) as token
-  FROM (
-    SELECT rolname::text, id::text
-      FROM postgrest.auth
-     WHERE id = id AND pass = pass
-  ) r;
-$$;
 
 
 CREATE FUNCTION varied_arguments(
@@ -340,42 +316,15 @@ AS $_$
   SELECT json_typeof(arg);
 $_$;
 
---
--- Name: jwt_test(); Type: FUNCTION; Schema: test; Owner: -
---
-
-CREATE FUNCTION jwt_test() RETURNS public.jwt_token
-    LANGUAGE sql SECURITY DEFINER
-    IMMUTABLE
-    AS $$
-SELECT jwt.sign(
-    row_to_json(r), 'reallyreallyreallyreallyverysafe'
-  ) as token
-  FROM (
-    SELECT 'joe'::text as iss, 'fun'::text as sub, 'everyone'::text as aud,
-       1300819380 as exp, 1300819380 as nbf, 1300819380 as iat,
-       'foo'::text as jti, 'postgrest_test'::text as role,
-       true as "http://postgrest.com/foo"
-  ) r;
-$$;
 
 
 CREATE OR REPLACE FUNCTION switch_role() RETURNS void
   LANGUAGE plpgsql
   AS $$
-declare
-  user_id text;
 Begin
-  user_id = (current_setting('request.jwt.claims')::json->>'id')::text;
-  if user_id = '1'::text then
-    execute 'set local role postgrest_test_author';
-  elseif user_id = '2'::text then
-    execute 'set local role postgrest_test_default_role';
-  elseif user_id = '3'::text then
-    RAISE EXCEPTION 'Disabled ID --> %', user_id USING HINT = 'Please contact administrator';
-  /* else */
-  /*   execute 'set local role postgrest_test_anonymous'; */
-  end if;
+  -- For RPC-only server, keep the default role (no role switching)
+  -- This function now does nothing but can be called without error
+  NULL;
 end
 $$;
 
@@ -386,23 +335,7 @@ CREATE FUNCTION get_current_user() RETURNS text
 SELECT current_user::text;
 $$;
 
---
--- Name: reveal_big_jwt(); Type: FUNCTION; Schema: test; Owner: -
---
 
-CREATE FUNCTION reveal_big_jwt() RETURNS TABLE (
-      iss text, sub text, exp bigint,
-      nbf bigint, iat bigint, jti text, "http://postgrest.com/foo" boolean
-    )
-AS $$
-  SELECT current_setting('request.jwt.claims')::json->>'iss' as iss,
-         current_setting('request.jwt.claims')::json->>'sub' as sub,
-         (current_setting('request.jwt.claims')::json->>'exp')::bigint as exp,
-         (current_setting('request.jwt.claims')::json->>'nbf')::bigint as nbf,
-         (current_setting('request.jwt.claims')::json->>'iat')::bigint as iat,
-         current_setting('request.jwt.claims')::json->>'jti' as jti,
-         (current_setting('request.jwt.claims')::json->>'http://postgrest.com/foo')::boolean as "http://postgrest.com/foo";
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
 
 
 CREATE FUNCTION assert() RETURNS void

@@ -884,14 +884,6 @@ spec =
             { matchStatus  = 200
             , matchHeaders = [ matchContentTypeJson ]
             }
-      it "current role is available as GUC claim" $
-        request methodPost "/rpc/get_guc_value" []
-            [json| { "prefix": "request.jwt.claims", "name": "role" } |]
-            `shouldRespondWith`
-            [json|"postgrest_test_anonymous"|]
-            { matchStatus  = 200
-            , matchHeaders = [ matchContentTypeJson ]
-            }
       it "single cookie ends up as claims" $
         request methodPost "/rpc/get_guc_value" [("Cookie","acookie=cookievalue")]
             [json| {"prefix": "request.cookies", "name":"acookie"} |]
@@ -1405,13 +1397,6 @@ spec =
           { matchStatus = 500 }
 
     -- here JWT has the role: postgrest_test_superuser
-    context "test function temp_file_limit" $
-      it "should be inaccessible to anonymous user" $
-        request methodGet "/rpc/temp_file_limit" [] "" `shouldRespondWith`
-          [json|{"code":"42501","message":"permission denied for function temp_file_limit","details":null,"hint":null}|]
-          { matchStatus = 401
-          , matchHeaders = [ matchContentTypeJson ]
-          }
 
     context "test table valued function with filter" $ do
       it "works with filter on unselected columns" $

@@ -165,9 +165,6 @@ CREATE TYPE apflora.qk_tpop_ohne_tpopber AS (
 
 
 
-CREATE TYPE auth.jwt_token AS (
-	token text
-);
 
 
 
@@ -380,30 +377,6 @@ CREATE FUNCTION apflora.correct_vornach_beginnap_stati(apid uuid) RETURNS void
 
 
 
-CREATE FUNCTION apflora.login(username text, pass text) RETURNS auth.jwt_token
-    LANGUAGE plpgsql
-    AS $_$
-declare
-  _role name;
-  result auth.jwt_token;
-begin
-  select auth.user_role($1, $2) into _role;
-  if _role is null then
-    raise invalid_password using message = 'invalid user or password';
-  end if;
-
-  select auth.sign(
-      row_to_json(r), current_setting('app.jwt_secret')
-    ) as token
-    from (
-      select _role as role,
-      $1 as username,
-      extract(epoch from now())::integer + 60*60*24*30 as exp
-    ) r
-    into result;
-  return result;
-end;
-$_$;
 
 
 
@@ -859,7 +832,7 @@ CREATE FUNCTION public.adresse_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -872,7 +845,7 @@ CREATE FUNCTION public.ap_bearbstand_werte_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -885,7 +858,7 @@ CREATE FUNCTION public.ap_erfbeurtkrit_werte_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -898,7 +871,7 @@ CREATE FUNCTION public.ap_erfkrit_werte_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -911,7 +884,7 @@ CREATE FUNCTION public.ap_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -924,7 +897,7 @@ CREATE FUNCTION public.ap_umsetzung_werte_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -937,7 +910,7 @@ CREATE FUNCTION public.apber_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -950,7 +923,7 @@ CREATE FUNCTION public.apberuebersicht_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -963,7 +936,7 @@ CREATE FUNCTION public.assozart_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -976,7 +949,7 @@ CREATE FUNCTION public.beob_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1007,7 +980,7 @@ CREATE FUNCTION public.beobzuordnung_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1020,7 +993,7 @@ CREATE FUNCTION public.ber_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1032,7 +1005,7 @@ $$;
 CREATE FUNCTION public.current_user_name() RETURNS text
     LANGUAGE sql STABLE SECURITY DEFINER
     AS $$
-  select nullif(current_setting('jwt.claims.username', true), '')::text;
+  select 'anonymous'::text;
 $$;
 
 
@@ -1060,7 +1033,7 @@ CREATE FUNCTION public.erfkrit_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1073,7 +1046,7 @@ CREATE FUNCTION public.idealbiotop_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1086,7 +1059,7 @@ CREATE FUNCTION public.pop_entwicklung_werte_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW."MutWer" = current_setting('request.jwt.claim.username', true);
+    NEW."MutWer" = NULL;
     NEW."MutWann" = NOW();
     RETURN NEW;
   END;
@@ -1099,7 +1072,7 @@ CREATE FUNCTION public.pop_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1112,7 +1085,7 @@ CREATE FUNCTION public.pop_status_werte_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1125,7 +1098,7 @@ CREATE FUNCTION public.popber_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1138,7 +1111,7 @@ CREATE FUNCTION public.popmassnber_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1151,7 +1124,7 @@ CREATE FUNCTION public.projekt_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1200,7 +1173,7 @@ CREATE FUNCTION public.tpop_apberrelevant_werte_on_update_set_mut() RETURNS trig
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1213,7 +1186,7 @@ CREATE FUNCTION public.tpop_entwicklung_werte_on_update_set_mut() RETURNS trigge
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1226,7 +1199,7 @@ CREATE FUNCTION public.tpop_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1239,7 +1212,7 @@ CREATE FUNCTION public.tpopber_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1252,7 +1225,7 @@ CREATE FUNCTION public.tpopkontr_idbiotuebereinst_werte_on_update_set_mut() RETU
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1265,7 +1238,7 @@ CREATE FUNCTION public.tpopkontr_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1278,7 +1251,7 @@ CREATE FUNCTION public.tpopkontr_typ_werte_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1291,7 +1264,7 @@ CREATE FUNCTION public.tpopkontrzaehl_einheit_werte_on_update_set_mut() RETURNS 
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1304,7 +1277,7 @@ CREATE FUNCTION public.tpopkontrzaehl_methode_werte_on_update_set_mut() RETURNS 
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1317,7 +1290,7 @@ CREATE FUNCTION public.tpopkontrzaehl_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1330,7 +1303,7 @@ CREATE FUNCTION public.tpopmassn_erfbeurt_werte_on_update_set_mut() RETURNS trig
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1343,7 +1316,7 @@ CREATE FUNCTION public.tpopmassn_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1356,7 +1329,7 @@ CREATE FUNCTION public.tpopmassn_typ_werte_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1369,7 +1342,7 @@ CREATE FUNCTION public.tpopmassnber_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1382,7 +1355,7 @@ CREATE FUNCTION public.ziel_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1395,7 +1368,7 @@ CREATE FUNCTION public.ziel_typ_werte_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1408,7 +1381,7 @@ CREATE FUNCTION public.zielber_on_update_set_mut() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
   BEGIN
-    NEW.changed_by = current_setting('request.jwt.claim.username', true);
+    NEW.changed_by = NULL;
     NEW.changed = NOW();
     RETURN NEW;
   END;
@@ -1444,32 +1417,6 @@ $$;
 
 
 
-CREATE FUNCTION request.jwt_claim(c text) RETURNS text
-    LANGUAGE sql STABLE
-    AS $$
-    select request.env_var('request.jwt.claim.' || c);
-$$;
-
-
-
-
-CREATE FUNCTION request.user_name() RETURNS text
-    LANGUAGE sql STABLE
-    AS $$
-    select case request.jwt_claim('username')
-    when '' then ''
-    else request.jwt_claim('username')::text
- end
-$$;
-
-
-
-
-CREATE FUNCTION request.user_role() RETURNS text
-    LANGUAGE sql STABLE
-    AS $$
-    select request.jwt_claim('role')::text;
-$$;
 
 
 
@@ -1516,7 +1463,7 @@ CREATE TABLE apflora.adresse (
     telefon text,
     email text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     evab_id_person uuid,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     freiw_erfko boolean DEFAULT false,
@@ -1626,7 +1573,7 @@ CREATE TABLE apflora.ap (
     start_jahr smallint,
     umsetzung integer,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     art_id uuid,
     bearbeiter uuid,
@@ -1695,7 +1642,7 @@ CREATE TABLE apflora.ap_bearbstand_werte (
     text character varying(50) DEFAULT NULL::character varying,
     sort smallint,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true) NOT NULL,
+    changed_by character varying(20) DEFAULT NULL NOT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL
 );
 
@@ -1719,7 +1666,7 @@ CREATE TABLE apflora.ap_erfbeurtkrit_werte (
     text character varying(50) DEFAULT NULL::character varying,
     sort smallint,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true) NOT NULL,
+    changed_by character varying(20) DEFAULT NULL NOT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL
 );
 
@@ -1743,7 +1690,7 @@ CREATE TABLE apflora.ap_erfkrit_werte (
     text character varying(50) DEFAULT NULL::character varying,
     sort smallint,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true) NOT NULL,
+    changed_by character varying(20) DEFAULT NULL NOT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL
 );
 
@@ -1771,7 +1718,7 @@ CREATE TABLE apflora.ap_umsetzung_werte (
     text character varying(50) DEFAULT NULL::character varying,
     sort smallint,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true) NOT NULL,
+    changed_by character varying(20) DEFAULT NULL NOT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL
 );
 
@@ -1838,7 +1785,7 @@ CREATE TABLE apflora.apber (
     wirkung_auf_art text,
     datum date,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     massnahmen_ap_bearb text,
     massnahmen_planung_vs_ausfuehrung text,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
@@ -1951,7 +1898,7 @@ CREATE TABLE apflora.apberuebersicht (
     jahr smallint,
     bemerkungen text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id_old integer,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     proj_id uuid
@@ -2006,7 +1953,7 @@ CREATE TABLE apflora.assozart (
     id_old integer,
     bemerkungen text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     ae_id uuid,
     ap_id uuid
@@ -2068,7 +2015,7 @@ CREATE TABLE apflora.beob (
     nicht_zuordnen boolean DEFAULT false,
     bemerkungen text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     quelle_id uuid
 );
 
@@ -2155,7 +2102,7 @@ CREATE TABLE apflora.ber (
     titel text,
     url text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     ap_id uuid
 );
@@ -2218,7 +2165,7 @@ CREATE TABLE apflora.erfkrit (
     erfolg integer,
     kriterien text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     ap_id uuid
 );
@@ -2305,7 +2252,7 @@ CREATE TABLE apflora.idealbiotop (
     baumschicht text,
     bemerkungen text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     ap_id uuid
 );
@@ -2440,7 +2387,7 @@ CREATE TABLE apflora.pop (
     x integer,
     y integer,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     ap_id uuid,
     status_unklar boolean DEFAULT false,
@@ -2522,7 +2469,7 @@ CREATE TABLE apflora.pop_status_werte (
     text character varying(60) DEFAULT NULL::character varying,
     sort smallint,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL
 );
 
@@ -2551,7 +2498,7 @@ CREATE TABLE apflora.popber (
     entwicklung integer,
     bemerkungen text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     pop_id uuid
 );
@@ -2611,7 +2558,7 @@ CREATE TABLE apflora.popmassnber (
     beurteilung integer,
     bemerkungen text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     pop_id uuid
 );
@@ -2669,7 +2616,7 @@ CREATE TABLE apflora.projekt (
     id_old integer,
     name character varying(150) DEFAULT NULL::character varying,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL
 );
 
@@ -2723,7 +2670,7 @@ CREATE TABLE apflora.tpop (
     bewirtschaftung text,
     bemerkungen text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     pop_id uuid,
     status_unklar boolean DEFAULT false,
@@ -2864,7 +2811,7 @@ CREATE TABLE apflora.tpop_apberrelevant_werte (
     code integer,
     text text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true) NOT NULL,
+    changed_by character varying(20) DEFAULT NULL NOT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL
 );
 
@@ -2888,7 +2835,7 @@ CREATE TABLE apflora.tpop_entwicklung_werte (
     text character varying(50) DEFAULT NULL::character varying,
     sort smallint,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true) NOT NULL,
+    changed_by character varying(20) DEFAULT NULL NOT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL
 );
 
@@ -2913,7 +2860,7 @@ CREATE TABLE apflora.tpopber (
     entwicklung integer,
     bemerkungen text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     tpop_id uuid
 );
@@ -3003,7 +2950,7 @@ CREATE TABLE apflora.tpopkontr (
     vegetationshoehe_mittel smallint,
     gefaehrdung text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     zeit_id uuid DEFAULT public.uuid_generate_v1mc(),
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     tpop_id uuid,
@@ -3218,7 +3165,7 @@ CREATE TABLE apflora.tpopkontr_idbiotuebereinst_werte (
     text character varying(50) DEFAULT NULL::character varying,
     sort smallint,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true) NOT NULL,
+    changed_by character varying(20) DEFAULT NULL NOT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL
 );
 
@@ -3242,7 +3189,7 @@ CREATE TABLE apflora.tpopkontr_typ_werte (
     text character varying(50) DEFAULT NULL::character varying,
     sort smallint,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true) NOT NULL,
+    changed_by character varying(20) DEFAULT NULL NOT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL
 );
 
@@ -3267,7 +3214,7 @@ CREATE TABLE apflora.tpopkontrzaehl (
     einheit integer,
     methode integer,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     tpopkontr_id uuid
 );
@@ -3318,7 +3265,7 @@ CREATE TABLE apflora.tpopkontrzaehl_einheit_werte (
     text character varying(50) DEFAULT NULL::character varying,
     sort smallint,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true) NOT NULL,
+    changed_by character varying(20) DEFAULT NULL NOT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL
 );
 
@@ -3342,7 +3289,7 @@ CREATE TABLE apflora.tpopkontrzaehl_methode_werte (
     text character varying(50) DEFAULT NULL::character varying,
     sort smallint,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true) NOT NULL,
+    changed_by character varying(20) DEFAULT NULL NOT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL
 );
 
@@ -3380,7 +3327,7 @@ CREATE TABLE apflora.tpopmassn (
     form text,
     pflanzanordnung text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     tpop_id uuid,
     bearbeiter uuid,
@@ -3497,7 +3444,7 @@ CREATE TABLE apflora.tpopmassn_erfbeurt_werte (
     text character varying(50) DEFAULT NULL::character varying,
     sort smallint,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true) NOT NULL,
+    changed_by character varying(20) DEFAULT NULL NOT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL
 );
 
@@ -3526,7 +3473,7 @@ CREATE TABLE apflora.tpopmassn_typ_werte (
     sort smallint,
     ansiedlung smallint NOT NULL,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true) NOT NULL,
+    changed_by character varying(20) DEFAULT NULL NOT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL
 );
 
@@ -3555,7 +3502,7 @@ CREATE TABLE apflora.tpopmassnber (
     beurteilung integer,
     bemerkungen text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     tpop_id uuid
 );
@@ -3638,7 +3585,7 @@ CREATE TABLE apflora.ziel (
     jahr smallint DEFAULT 1 NOT NULL,
     bezeichnung text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     ap_id uuid
 );
@@ -3683,7 +3630,7 @@ CREATE TABLE apflora.ziel_typ_werte (
     text character varying(50) DEFAULT NULL::character varying,
     sort smallint,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true) NOT NULL,
+    changed_by character varying(20) DEFAULT NULL NOT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL
 );
 
@@ -5316,7 +5263,7 @@ CREATE TABLE apflora.zielber (
     erreichung text,
     bemerkungen text,
     changed date DEFAULT now(),
-    changed_by character varying(20) DEFAULT current_setting('request.jwt.claim.username'::text, true),
+    changed_by character varying(20) DEFAULT NULL,
     id uuid DEFAULT public.uuid_generate_v1mc() NOT NULL,
     ziel_id uuid
 );

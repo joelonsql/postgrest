@@ -11,19 +11,23 @@ import Text.Heredoc        (str)
 
 import Protolude  hiding (get)
 import SpecHelper
+import qualified Data.ByteString as BS
+
+dummyJwt :: BS.ByteString
+dummyJwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoidGVzdF91c2VyIn0.MA_1t04Ey2M23g_m2u_P_2NMM4QIKBvj8E9n82iH_5Y"
 
 spec :: SpecWith ((), Application)
 spec = describe "custom media types" $ do
   context "for tables with aggregate" $ do
     it "can query if there's an aggregate defined for the table" $ do
-      r <- request methodGet "/lines" (acceptHdrs "application/vnd.twkb") ""
+      r <- authedRequest methodGet "/lines" dummyJwt (acceptHdrs "application/vnd.twkb") ""
       liftIO $ do
         simpleBody r `shouldBe` readFixtureFile "lines.twkb"
         simpleHeaders r `shouldContain` [("Content-Type", "application/vnd.twkb")]
         simpleHeaders r `shouldContain` [("Content-Length", "30")]
 
     it "can query by id if there's an aggregate defined for the table" $ do
-      r <- request methodGet "/lines?id=eq.1" (acceptHdrs "application/vnd.twkb") ""
+      r <- authedRequest methodGet "/lines?id=eq.1" dummyJwt (acceptHdrs "application/vnd.twkb") ""
       liftIO $ do
         simpleBody r `shouldBe` readFixtureFile "1.twkb"
         simpleHeaders r `shouldContain` [("Content-Type", "application/vnd.twkb")]

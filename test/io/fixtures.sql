@@ -85,21 +85,11 @@ begin
   perform pg_notify('pgrst', 'reload schema');
 end $_$ volatile security definer language plpgsql ;
 
-create function invalid_role_claim_key_reload() returns void as $_$
-begin
-  alter role postgrest_test_authenticator set pgrst.jwt_role_claim_key = 'test';
-  perform pg_notify('pgrst', 'reload config');
-end $_$ volatile security definer language plpgsql ;
 
 create function notify_do_nothing() returns void as $_$
   notify pgrst, 'nothing';
 $_$ language sql;
 
-create function reset_invalid_role_claim_key() returns void as $_$
-begin
-  alter role postgrest_test_authenticator reset pgrst.jwt_role_claim_key;
-  perform pg_notify('pgrst', 'reload config');
-end $_$ volatile security definer language plpgsql ;
 
 create function reload_pgrst_config() returns void as $_$
 begin

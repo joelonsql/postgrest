@@ -13,7 +13,6 @@ module PostgREST.Error
   , SchemaCacheError(..)
   , PgError(..)
   , Error(..)
-  , JwtError (..)
   , errorPayload
   , status
   ) where
@@ -151,7 +150,7 @@ instance PgrstError ApiRequestError where
 -- PGRST0xx -> Connection Error
 -- PGRST1xx -> ApiRequest Error
 -- PGRST2xx -> SchemaCache Error
--- PGRST3xx -> JWT authentication Error
+-- PGRST3xx -> (removed JWT authentication errors)
 -- PGRSTXxx -> Internal Hasql Error
 
 instance ErrorBody ApiRequestError where
@@ -596,10 +595,7 @@ pgErrorStatus authed (SQL.SessionUsageError (SQL.QueryError _ _ (SQL.ResultError
           if BS.isSuffixOf "requires a WHERE clause" m
             then HTTP.status400 -- special case for pg-safeupdate, which we consider as client error
             else HTTP.status500 -- generic function or view server error, e.g. "more than one row returned by a subquery used as an expression"
-        "22023"   -> -- invalid_parameter_value. Catch nonexistent role error, see https://github.com/PostgREST/postgrest/issues/3601
-          if BS.isPrefixOf "role" m && BS.isSuffixOf "does not exist" m
-            then HTTP.status401 -- role in jwt does not exist
-            else HTTP.status400
+        "22023"   -> HTTP.status400 -- invalid_parameter_value
         '2':'5':_ -> HTTP.status500 -- invalid tx state
         '2':'8':_ -> HTTP.status403 -- invalid auth specification
         '2':'D':_ -> HTTP.status500 -- invalid tx termination
@@ -638,28 +634,19 @@ pgErrorStatus authed (SQL.SessionUsageError (SQL.QueryError _ _ (SQL.ResultError
 data Error
   = ApiRequestError ApiRequestError
   | SchemaCacheErr SchemaCacheError
-  | JwtErr JwtError
   | NoSchemaCacheError
   | PgErr PgError
   deriving Show
 
-data JwtError
-  = JwtDecodeError Text
-  | JwtSecretMissing
-  | JwtTokenRequired
-  | JwtClaimsError Text
-  deriving Show
 
 instance PgrstError Error where
   status (ApiRequestError err) = status err
   status (SchemaCacheErr err)  = status err
-  status (JwtErr err)          = status err
   status NoSchemaCacheError    = HTTP.status503
   status (PgErr err)           = status err
 
   headers (ApiRequestError err)  = proxyStatusHeader (code err) : headers err
   headers (SchemaCacheErr err)   = proxyStatusHeader (code err) : headers err
-  headers (JwtErr err)           = proxyStatusHeader (code err) : headers err
   headers (PgErr err)            = proxyStatusHeader (code err) : headers err
   headers err@NoSchemaCacheError = proxyStatusHeader (code err) : mempty
 
@@ -670,64 +657,24 @@ instance JSON.ToJSON Error where
 instance ErrorBody Error where
   code (ApiRequestError err) = code err
   code (SchemaCacheErr err)  = code err
-  code (JwtErr err)          = code err
   code NoSchemaCacheError    = "PGRST002"
   code (PgErr err)           = code err
 
   message (ApiRequestError err) = message err
   message (SchemaCacheErr err)  = message err
-  message (JwtErr err)          = message err
   message NoSchemaCacheError    = "Could not query the database for the schema cache. Retrying."
   message (PgErr err)           = message err
 
   details (ApiRequestError err) = details err
   details (SchemaCacheErr err)  = details err
-  details (JwtErr err)          = details err
   details NoSchemaCacheError    = Nothing
   details (PgErr err)           = details err
 
   hint (ApiRequestError err) = hint err
   hint (SchemaCacheErr err)  = hint err
-  hint (JwtErr err)          = hint err
   hint NoSchemaCacheError    = Nothing
   hint (PgErr err)           = hint err
 
-instance PgrstError JwtError where
-  status JwtDecodeError{} = HTTP.unauthorized401
-  status JwtSecretMissing = HTTP.status500
-  status JwtTokenRequired = HTTP.unauthorized401
-  status JwtClaimsError{} = HTTP.unauthorized401
-
-  headers (JwtDecodeError m) = [invalidTokenHeader m]
-  headers JwtTokenRequired   = [requiredTokenHeader]
-  headers (JwtClaimsError m) = [invalidTokenHeader m]
-  headers _                  = mempty
-
-instance JSON.ToJSON JwtError where
-  toJSON err = toJsonPgrstError
-    (code err) (message err) (details err) (hint err)
-
-instance ErrorBody JwtError where
-  code JwtSecretMissing   = "PGRST300"
-  code (JwtDecodeError _) = "PGRST301"
-  code JwtTokenRequired   = "PGRST302"
-  code (JwtClaimsError _) = "PGRST303"
-
-  message JwtSecretMissing     = "Server lacks JWT secret"
-  message (JwtDecodeError msg) = msg
-  message JwtTokenRequired     = "Anonymous access is disabled"
-  message (JwtClaimsError msg) = msg
-
-  details _ = Nothing
-
-  hint _    = Nothing
-
-invalidTokenHeader :: Text -> Header
-invalidTokenHeader m =
-  ("WWW-Authenticate", "Bearer error=\"invalid_token\", " <> "error_description=" <> encodeUtf8 (show m))
-
-requiredTokenHeader :: Header
-requiredTokenHeader = ("WWW-Authenticate", "Bearer")
 
 -- For parsing byteString to JSON Object, used for allowing full response control
 data PgRaiseErrMessage = PgRaiseErrMessage {

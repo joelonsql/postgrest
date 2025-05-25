@@ -280,3 +280,7 @@ getInsertDataForTiobePlsTable rows =
 
 readFixtureFile :: FilePath -> BL.ByteString
 readFixtureFile file = unsafePerformIO $ BL.readFile $ "test/spec/fixtures/" <> file
+
+
+authedRequest :: Method -> BS.ByteString -> BS.ByteString -> [Header] -> BL.ByteString -> WaiSession () SResponse
+authedRequest method path jwt authHeaders body = Test.Hspec.Wai.request method path (authHeader "Bearer" jwt : authHeaders) body

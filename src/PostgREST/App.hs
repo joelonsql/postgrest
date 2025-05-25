@@ -157,7 +157,7 @@ postgrestResponse appState conf@AppConfig{..} maybeSchemaCache pgVer req = do
     when (configLogQuery /= LogQueryDisabled) $ logSQL $ either Error.status Response.pgrstStatus response
     liftEither response
 
-  return $ toWaiResponse (ServerTiming Nothing parseTime planTime queryTime respTime) resp
+  return $ toWaiResponse (ServerTiming parseTime planTime queryTime respTime) resp
 
   where
     toWaiResponse :: ServerTiming -> Response.PgrstResponse -> Wai.Response

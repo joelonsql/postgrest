@@ -57,11 +57,6 @@ dbSettingsNames =
   ,"db_schemas"
   ,"db_tx_end"
   ,"db_hoisted_tx_settings"
-  ,"jwt_aud"
-  ,"jwt_role_claim_key"
-  ,"jwt_secret"
-  ,"jwt_secret_is_base64"
-  ,"jwt_cache_max_lifetime"
   ,"openapi_mode"
   ,"openapi_security_active"
   ,"openapi_server_proxy_uri"
@@ -82,14 +77,14 @@ pgVersionStatement = SQL.Statement sql HE.noParams versionRow
 -- | Query the in-database configuration. The settings have the following priorities:
 --
 -- 1. Role + with database-specific settings:
---    ALTER ROLE authenticator IN DATABASE postgres SET <prefix>jwt_aud = 'val';
+--    ALTER ROLE authenticator IN DATABASE postgres SET <prefix>db_schemas = 'public';
 -- 2. Role + with settings:
---    ALTER ROLE authenticator SET <prefix>jwt_aud = 'overridden';
+--    ALTER ROLE authenticator SET <prefix>db_schemas = 'overridden';
 -- 3. pre-config function:
---    CREATE FUNCTION pre_config() .. PERFORM set_config(<prefix>jwt_aud, 'pre_config_aud'..)
+--    CREATE FUNCTION pre_config() .. PERFORM set_config(<prefix>db_schemas, 'public'..)
 --
--- The example above will result in <prefix>jwt_aud = 'val'
--- A setting on the database only will have no effect: ALTER DATABASE postgres SET <prefix>jwt_aud = 'xx'
+-- The example above will result in <prefix>db_schemas = 'public'
+-- A setting on the database only will have no effect: ALTER DATABASE postgres SET <prefix>db_schemas = 'xx'
 queryDbSettings :: Maybe Text -> Bool -> Session [(Text, Text)]
 queryDbSettings preConfFunc prepared =
   let transaction = if prepared then SQL.transaction else SQL.unpreparedTransaction in

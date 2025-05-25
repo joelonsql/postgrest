@@ -8,6 +8,7 @@ import Test.Hspec.Wai
 
 import Protolude
 
+
 spec :: SpecWith ((), Application)
 spec =
   describe "CORS" $ do

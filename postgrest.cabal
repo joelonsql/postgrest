@@ -12,7 +12,6 @@ category:           Executable, PostgreSQL, Network APIs
 homepage:           https://postgrest.org
 bug-reports:        https://github.com/PostgREST/postgrest/issues
 build-type:         Simple
-extra-source-files: CHANGELOG.md
 cabal-version:      >= 1.10
 
 tested-with:

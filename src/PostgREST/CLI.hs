@@ -193,18 +193,6 @@ exampleConfigFile =
       |## https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING
       |db-uri = "postgresql://"
       |
-      |# jwt-aud = "your_audience_claim"
-      |
-      |## Jspath to the role claim key
-      |jwt-role-claim-key = ".role"
-      |
-      |## Choose a secret, JSON Web Key (or set) to enable JWT auth
-      |## (use "@filename" to load from separate file)
-      |# jwt-secret = "secret_with_at_least_32_characters"
-      |jwt-secret-is-base64 = false
-      |
-      |## Enables and set JWT Cache max lifetime, disables caching with 0
-      |# jwt-cache-max-lifetime = 0
       |
       |## Logging level, the admitted values are: crit, error, warn, info and debug.
       |log-level = "error"

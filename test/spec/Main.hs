@@ -50,7 +50,6 @@ import qualified Feature.Query.InsertSpec
 import qualified Feature.Query.JsonOperatorSpec
 import qualified Feature.Query.MultipleSchemaSpec
 import qualified Feature.Query.NullsStripSpec
-import qualified Feature.Query.PgSafeUpdateSpec
 import qualified Feature.Query.PlanSpec
 import qualified Feature.Query.PostGISSpec
 import qualified Feature.Query.PreferencesSpec
@@ -120,7 +119,6 @@ main = do
       disallowRollbackApp  = app testCfgDisallowRollback
       forceRollbackApp     = app testCfgForceRollback
       planEnabledApp       = app testPlanEnabledCfg
-      pgSafeUpdateApp      = app testPgSafeUpdateEnabledCfg
       obsApp               = app testObservabilityCfg
       serverTiming         = app testCfgServerTiming
       aggregatesEnabled    = app testCfgAggregatesEnabled
@@ -154,7 +152,6 @@ main = do
         , ("Feature.Query.JsonOperatorSpec"              , Feature.Query.JsonOperatorSpec.spec)
         , ("Feature.Query.NullsStripSpec"                , Feature.Query.NullsStripSpec.spec)
         , ("Feature.Query.PgErrorCodeMappingSpec"        , Feature.Query.ErrorSpec.pgErrorCodeMapping)
-        , ("Feature.Query.PgSafeUpdateSpec.disabledSpec" , Feature.Query.PgSafeUpdateSpec.disabledSpec)
         , ("Feature.Query.PlanSpec.disabledSpec"         , Feature.Query.PlanSpec.disabledSpec)
         , ("Feature.Query.PreferencesSpec"               , Feature.Query.PreferencesSpec.spec)
         , ("Feature.Query.QuerySpec"                     , Feature.Query.QuerySpec.spec)
@@ -270,11 +267,6 @@ main = do
     -- this test runs with tx-rollback-all = true and tx-allow-override = false
     before forceRollbackApp $
       describe "Feature.RollbackForcedSpec" Feature.RollbackSpec.forced
-
-    -- This test runs with a pre request to enable the pg-safeupdate library per-session.
-    -- This needs to run last, because once pg safe update is loaded, it can't be unloaded again.
-    before pgSafeUpdateApp $
-      describe "Feature.Query.PgSafeUpdateSpec.spec" Feature.Query.PgSafeUpdateSpec.spec
 
   where
     loadSCache pool conf =

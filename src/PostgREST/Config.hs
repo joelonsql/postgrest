@@ -13,9 +13,6 @@ Description : Manages PostgREST configuration type and parser.
 module PostgREST.Config
   ( AppConfig (..)
   , Environment
-  , JSPath
-  , JSPathExp(..)
-  , FilterExp(..)
   , LogLevel(..)
   , LogQuery(..)
   , OpenAPIMode(..)
@@ -25,21 +22,16 @@ module PostgREST.Config
   , readAppConfig
   , readPGRSTEnvironment
   , toURI
-  , parseSecret
   , addFallbackAppName
   , addTargetSessionAttrs
   ) where
 
-import qualified Data.Aeson             as JSON
 import qualified Data.ByteString        as BS
-import qualified Data.ByteString.Base64 as B64
 import qualified Data.CaseInsensitive   as CI
 import qualified Data.Configurator      as C
 import qualified Data.Map.Strict        as M
 import qualified Data.Text              as T
 import qualified Data.Text.Encoding     as T
-import qualified Jose.Jwa               as JWT
-import qualified Jose.Jwk               as JWT
 
 import Control.Monad           (fail)
 import Data.Either.Combinators (mapLeft)
@@ -47,7 +39,6 @@ import Data.List               (lookup)
 import Data.List.NonEmpty      (fromList, toList)
 import Data.Maybe              (fromJust)
 import Data.Scientific         (floatingOrInteger)
-import Jose.Jwk                (Jwk, JwkSet)
 import Network.URI             (escapeURIString,
                                 isUnescapedInURIComponent)
 import Numeric                 (readOct, showOct)
@@ -56,9 +47,6 @@ import System.Posix.Types      (FileMode)
 
 import PostgREST.Config.Database         (RoleIsolationLvl,
                                           RoleSettings)
-import PostgREST.Config.JSPath           (FilterExp (..), JSPath,
-                                          JSPathExp (..), dumpJSPath,
-                                          pRoleClaimKey)
 import PostgREST.Config.Proxy            (Proxy (..),
                                           isMalformedProxyUri, toURI)
 import PostgREST.SchemaCache.Identifiers (QualifiedIdentifier, dumpQi,
@@ -92,12 +80,6 @@ data AppConfig = AppConfig
   , configDbTxRollbackAll          :: Bool
   , configDbUri                    :: Text
   , configFilePath                 :: Maybe FilePath
-  , configJWKS                     :: Maybe JwkSet
-  , configJwtAudience              :: Maybe Text
-  , configJwtRoleClaimKey          :: JSPath
-  , configJwtSecret                :: Maybe BS.ByteString
-  , configJwtSecretIsBase64        :: Bool
-  , configJwtCacheMaxLifetime      :: Int
   , configLogLevel                 :: LogLevel
   , configLogQuery                 :: LogQuery
   , configOpenApiMode              :: OpenAPIMode
@@ -173,11 +155,6 @@ toText conf =
       ,("db-pre-config",             q . maybe mempty dumpQi . configDbPreConfig)
       ,("db-tx-end",                 q . showTxEnd)
       ,("db-uri",                    q . configDbUri)
-      ,("jwt-aud",                   q . fromMaybe mempty . configJwtAudience)
-      ,("jwt-role-claim-key",        q . T.intercalate mempty . fmap dumpJSPath . configJwtRoleClaimKey)
-      ,("jwt-secret",                q . T.decodeUtf8 . showJwtSecret)
-      ,("jwt-secret-is-base64",          T.toLower . show . configJwtSecretIsBase64)
-      ,("jwt-cache-max-lifetime",                   show . configJwtCacheMaxLifetime)
       ,("log-level",                 q . dumpLogLevel . configLogLevel)
       ,("log-query",                 q . dumpLogQuery . configLogQuery)
       ,("openapi-mode",              q . dumpOpenApiMode . configOpenApiMode)
@@ -205,11 +182,6 @@ toText conf =
       ( False, True  ) -> "commit-allow-override"
       ( True , False ) -> "rollback"
       ( True , True  ) -> "rollback-allow-override"
-    showJwtSecret c
-      | configJwtSecretIsBase64 c = B64.encode secret
-      | otherwise                 = secret
-      where
-        secret = fromMaybe mempty $ configJwtSecret c
     showSocketMode c = showOct (configServerUnixSocketMode c) mempty
 
 -- This class is needed for the polymorphism of overrideFromDbOrEnvironment
@@ -243,9 +215,6 @@ readAppConfig dbSettings optPath prevDbUri roleSettings roleIsolationLvl = do
 
     decodeLoadFiles :: AppConfig -> IO (Either IOException AppConfig)
     decodeLoadFiles parsedConfig = try $
-      decodeJWKS =<<
-      decodeSecret =<<
-      readSecretFile =<<
       readDbUriFile prevDbUri parsedConfig
 
 parser :: Maybe FilePath -> Environment -> [(Text, Text)] -> RoleSettings -> RoleIsolationLvl -> C.Parser C.Config AppConfig
@@ -280,14 +249,6 @@ parser optPath env dbSettings roleSettings roleIsolationLvl =
     <*> parseTxEnd "db-tx-end" fst
     <*> (fromMaybe "postgresql://" <$> optString "db-uri")
     <*> pure optPath
-    <*> pure Nothing
-    <*> optString "jwt-aud"
-    <*> parseRoleClaimKey "jwt-role-claim-key" "role-claim-key"
-    <*> (fmap encodeUtf8 <$> optString "jwt-secret")
-    <*> (fromMaybe False <$> optWithAlias
-          (optBool "jwt-secret-is-base64")
-          (optBool "secret-is-base64"))
-    <*> (fromMaybe 0 <$> optInt "jwt-cache-max-lifetime")
     <*> parseLogLevel "log-level"
     <*> parseLogQuery "log-query"
     <*> parseOpenAPIMode "openapi-mode"
@@ -384,11 +345,6 @@ parser optPath env dbSettings roleSettings roleIsolationLvl =
         Just "rollback-allow-override" -> pure $ f (True,       True)
         Just _                         -> fail "Invalid transaction termination. Check your configuration."
 
-    parseRoleClaimKey :: C.Key -> C.Key -> C.Parser C.Config JSPath
-    parseRoleClaimKey k al =
-      optWithAlias (optString k) (optString al) >>= \case
-        Nothing  -> pure [JSPKey "role"]
-        Just rck -> either (fail . show) pure $ pRoleClaimKey rck
 
     parseCORSAllowedOrigins k =
       optString k >>= \case
@@ -450,54 +406,6 @@ parser optPath env dbSettings roleSettings roleIsolationLvl =
     defaultServerHost :: Maybe Text -> Text
     defaultServerHost = fromMaybe "!4"
 
--- | Read the JWT secret from a file if configJwtSecret is actually a
--- filepath(has @ as its prefix). To check if the JWT secret is provided is
--- in fact a file path, it must be decoded as 'Text' to be processed.
-readSecretFile :: AppConfig -> IO AppConfig
-readSecretFile conf =
-  maybe (return conf) readSecret maybeFilename
-  where
-    maybeFilename = T.stripPrefix "@" . decodeUtf8 =<< configJwtSecret conf
-    readSecret filename = do
-      jwtSecret <- chomp <$> BS.readFile (toS filename)
-      return $ conf { configJwtSecret = Just jwtSecret }
-    chomp bs = fromMaybe bs (BS.stripSuffix "\n" bs)
-
-decodeSecret :: AppConfig -> IO AppConfig
-decodeSecret conf@AppConfig{..} =
-  case (configJwtSecretIsBase64, configJwtSecret) of
-    (True, Just secret) ->
-      either fail (return . updateSecret) $ decodeB64 secret
-    _ -> return conf
-  where
-    updateSecret bs = conf { configJwtSecret = Just bs }
-    decodeB64 = B64.decode . encodeUtf8 . T.strip . replaceUrlChars . decodeUtf8
-    replaceUrlChars = T.replace "_" "/" . T.replace "-" "+" . T.replace "." "="
-
--- | Parse `jwt-secret` configuration option and turn into a JWKS.
---
--- There are three ways to specify `jwt-secret`: text secret, JSON Web Key
--- (JWK), or JSON Web Key Set (JWKS). The first two are converted into a JwkSet
--- with one key and the last is converted as is.
-decodeJWKS :: AppConfig -> IO AppConfig
-decodeJWKS conf = do
-  jwks <- case configJwtSecret conf of
-    Just s  -> either fail (pure . Just) $ parseSecret s
-    Nothing -> pure Nothing
-  return $ conf { configJWKS = jwks }
-
-parseSecret :: ByteString -> Either [Char] JwkSet
-parseSecret bytes =
-  case maybeJWKSet of
-    Just jwk -> Right jwk
-    Nothing  -> maybe validateSecret (\jwk' -> Right $ JWT.JwkSet [jwk']) maybeJWK
-  where
-    maybeJWKSet = JSON.decodeStrict bytes :: Maybe JwkSet
-    maybeJWK = JSON.decodeStrict bytes :: Maybe Jwk
-    secret = JWT.JwkSet [JWT.SymmetricJwk bytes Nothing (Just JWT.Sig) (Just $ JWT.Signed JWT.HS256)]
-    validateSecret
-      | BS.length bytes < 32 = Left "The JWT secret must be at least 32 characters long."
-      | otherwise = Right secret
 
 -- | Read database uri from a separate file if `db-uri` is a filepath.
 readDbUriFile :: Maybe Text -> AppConfig -> IO AppConfig

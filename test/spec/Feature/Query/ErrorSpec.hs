@@ -8,7 +8,6 @@ import Test.Hspec.Wai
 import Test.Hspec.Wai.JSON
 
 import Protolude  hiding (get)
-import SpecHelper
 
 pgErrorCodeMapping :: SpecWith ((), Application)
 pgErrorCodeMapping = do
@@ -48,15 +47,6 @@ pgErrorCodeMapping = do
                            , "Content-Length" <:> "182" ]
           }
 
-      it "works with Jwt error" $ do
-        let auth = authHeaderJWT "ey9zdGdyZXN0X3Rlc3RfYXV0aG9yIiwiaWQiOiJqZG9lIn0.y4vZuu1dDdwAl0-S00MCRWRYMlJ5YAMSir6Es6WtWx0"
-        request methodGet "/authors_only" [auth] ""
-          `shouldRespondWith`
-          [json| {"message":"Expected 3 parts in JWT; got 2","code":"PGRST301","hint":null,"details":null} |]
-          { matchStatus = 401
-          , matchHeaders = [ "Proxy-Status" <:> "PostgREST; error=PGRST301"
-                           , "Content-Length" <:> "89" ]
-          }
 
       it "works with raise sqlstate custom error" $
         get "/rpc/raise_pt402"

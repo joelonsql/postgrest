@@ -916,14 +916,6 @@ spec =
             { matchStatus  = 200
             , matchHeaders = [ matchContentTypeJson ]
             }
-      it "gets the Authorization value" $
-        request methodPost "/rpc/get_guc_value" [authHeaderJWT "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoicG9zdGdyZXN0X3Rlc3RfYXV0aG9yIn0.Xod-F15qsGL0WhdOCr2j3DdKuTw9QJERVgoFD3vGaWA"]
-            [json| {"prefix": "request.headers", "name":"authorization"} |]
-            `shouldRespondWith`
-            [json|"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoicG9zdGdyZXN0X3Rlc3RfYXV0aG9yIn0.Xod-F15qsGL0WhdOCr2j3DdKuTw9QJERVgoFD3vGaWA"|]
-            { matchStatus = 200
-            , matchHeaders = []
-            }
       it "gets the http method" $
         request methodPost "/rpc/get_guc_value" []
           [json| {"name":"request.method"} |]
@@ -1414,13 +1406,11 @@ spec =
 
     -- here JWT has the role: postgrest_test_superuser
     context "test function temp_file_limit" $
-      let auth = authHeaderJWT "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoicG9zdGdyZXN0X3Rlc3Rfc3VwZXJ1c2VyIiwiaWQiOiJqZG9lIn0.LQ-qx0ArBnfkwQQhIHKF5cS-lzl0gnTPI8NLoPbL5Fg" in
-      it "should return http status 500" $
-        request methodGet "/rpc/temp_file_limit" [auth] "" `shouldRespondWith`
-          [json|{"code":"53400","message":"temporary file size exceeds temp_file_limit (1kB)","details":null,"hint":null}|]
-          { matchStatus = 500
-          , matchHeaders = [ "Content-Length" <:> "105"
-                           , matchContentTypeJson ]
+      it "should be inaccessible to anonymous user" $
+        request methodGet "/rpc/temp_file_limit" [] "" `shouldRespondWith`
+          [json|{"code":"42501","message":"permission denied for function temp_file_limit","details":null,"hint":null}|]
+          { matchStatus = 401
+          , matchHeaders = [ matchContentTypeJson ]
           }
 
     context "test table valued function with filter" $ do

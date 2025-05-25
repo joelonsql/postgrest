@@ -657,22 +657,6 @@ spec actualPgVersion = do
         , matchHeaders = [matchContentTypeJson]
         }
 
-  describe "Row level permission" $
-    it "set user_id when inserting rows" $ do
-      request methodPost "/authors_only"
-          [ authHeaderJWT "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoicG9zdGdyZXN0X3Rlc3RfYXV0aG9yIiwiaWQiOiJqZG9lIn0.B-lReuGNDwAlU1GOC476MlO0vAt9JNoHIlxg2vwMaO0", ("Prefer", "return=representation") ]
-          [json| { "secret": "nyancat" } |]
-        `shouldRespondWith`
-          [json|[{"owner":"jdoe","secret":"nyancat"}]|]
-          { matchStatus  = 201 }
-
-      request methodPost "/authors_only"
-          -- jwt token for jroe
-          [ authHeaderJWT "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoicG9zdGdyZXN0X3Rlc3RfYXV0aG9yIiwiaWQiOiJqcm9lIn0.2e7mx0U4uDcInlbJVOBGlrRufwqWLINDIEDC1vS0nw8", ("Prefer", "return=representation") ]
-          [json| { "secret": "lolcat", "owner": "hacker" } |]
-        `shouldRespondWith`
-          [json|[{"owner":"jroe","secret":"lolcat"}]|]
-          { matchStatus  = 201 }
 
   context "tables with self reference foreign keys" $ do
     it "embeds parent after insert" $

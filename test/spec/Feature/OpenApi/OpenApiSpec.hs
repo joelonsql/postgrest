@@ -215,13 +215,12 @@ spec = describe "OpenAPI" $ do
 
       liftIO $ tablePath `shouldBe` Nothing
 
-    it "includes table if user has permission" $ do
-      let auth = authHeaderJWT "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoicG9zdGdyZXN0X3Rlc3RfYXV0aG9yIn0.Xod-F15qsGL0WhdOCr2j3DdKuTw9QJERVgoFD3vGaWA"
-      r <- simpleBody <$> request methodGet "/" [auth] ""
+    it "excludes privileged table for anonymous user" $ do
+      r <- simpleBody <$> request methodGet "/" [] ""
       let tableTag = r ^? key "paths" . key "/authors_only"
                     . key "post"  . key "tags"
                     . nth 0
-      liftIO $ tableTag `shouldBe` Just [aesonQQ|"authors_only"|]
+      liftIO $ tableTag `shouldBe` Nothing
 
     it "includes a fk description for a O2O relationship" $ do
       r <- simpleBody <$> get "/"
@@ -1013,14 +1012,13 @@ spec = describe "OpenAPI" $ do
 
       liftIO $ funcPath `shouldBe` Nothing
 
-    it "includes function if user has permission" $ do
-      let auth = authHeaderJWT "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoicG9zdGdyZXN0X3Rlc3RfYXV0aG9yIn0.Xod-F15qsGL0WhdOCr2j3DdKuTw9QJERVgoFD3vGaWA"
-      r <- simpleBody <$> request methodGet "/" [auth] ""
+    it "excludes privileged function for anonymous user" $ do
+      r <- simpleBody <$> request methodGet "/" [] ""
       let funcTag = r ^? key "paths" . key "/rpc/privileged_hello"
                     . key "post"  . key "tags"
                     . nth 0
 
-      liftIO $ funcTag `shouldBe` Just [aesonQQ|"(rpc) privileged_hello"|]
+      liftIO $ funcTag `shouldBe` Nothing
 
     it "doesn't include OUT params of function as required parameters" $ do
       r <- simpleBody <$> get "/"

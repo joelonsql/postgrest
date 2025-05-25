@@ -23,7 +23,6 @@ import Text.Regex.TDFA      ((=~))
 import Network.HTTP.Types
 import Test.Hspec
 import Test.Hspec.Wai
-import Text.Heredoc
 
 import Data.String                       (String)
 import PostgREST.Config                  (AppConfig (..),

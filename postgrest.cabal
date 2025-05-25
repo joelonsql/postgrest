@@ -199,13 +199,7 @@ test-suite spec
                       NoImplicitPrelude
   hs-source-dirs:     test/spec
   main-is:            Main.hs
-  other-modules:      Feature.Auth.AsymmetricJwtSpec
-                      Feature.Auth.AudienceJwtSecretSpec
-                      Feature.Auth.AuthSpec
-                      Feature.Auth.BinaryJwtSecretSpec
-                      Feature.Auth.NoAnonSpec
-                      Feature.Auth.NoJwtSecretSpec
-                      Feature.ConcurrentSpec
+  other-modules:      Feature.ConcurrentSpec
                       Feature.CorsSpec
                       Feature.ExtraSearchPathSpec
                       Feature.NoSuperuserSpec

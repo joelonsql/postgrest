@@ -16,16 +16,9 @@ import Protolude                 hiding (toList, toS)
 import SpecHelper
 
 import qualified PostgREST.AppState      as AppState
-import qualified PostgREST.Auth.JwtCache as JwtCache
 import qualified PostgREST.Logger        as Logger
 import qualified PostgREST.Metrics       as Metrics
 
-import qualified Feature.Auth.AsymmetricJwtSpec
-import qualified Feature.Auth.AudienceJwtSecretSpec
-import qualified Feature.Auth.AuthSpec
-import qualified Feature.Auth.BinaryJwtSecretSpec
-import qualified Feature.Auth.NoAnonSpec
-import qualified Feature.Auth.NoJwtSecretSpec
 import qualified Feature.ConcurrentSpec
 import qualified Feature.CorsSpec
 import qualified Feature.ExtraSearchPathSpec
@@ -84,13 +77,12 @@ main = do
   -- cached schema cache so most tests run fast
   baseSchemaCache <- loadSCache pool testCfg
   sockets <- AppState.initSockets testCfg
-  jwtCacheState <- JwtCache.init
   loggerState <- Logger.init
   metricsState <- Metrics.init (configDbPoolSize testCfg)
 
   let
     initApp sCache config = do
-      appState <- AppState.initWithPool sockets pool config jwtCacheState loggerState metricsState (const $ pure ())
+      appState <- AppState.initWithPool sockets pool config loggerState metricsState (const $ pure ())
       AppState.putPgVersion appState actualPgVersion
       AppState.putSchemaCache appState (Just sCache)
       return ((), postgrest (configLogLevel config) appState (pure ()))
@@ -108,12 +100,6 @@ main = do
       disabledOpenApi      = app testDisabledOpenApiCfg
       securityOpenApi      = app testSecurityOpenApiCfg
       proxyApp             = app testProxyCfg
-      noAnonApp            = app testCfgNoAnon
-      noJwtSecretApp       = app testCfgNoJwtSecret
-      binaryJwtApp         = app testCfgBinaryJWT
-      audJwtApp            = app testCfgAudienceJWT
-      asymJwkApp           = app testCfgAsymJWK
-      asymJwkSetApp        = app testCfgAsymJWKSet
       rootSpecApp          = app testCfgRootSpec
       responseHeadersApp   = app testCfgResponseHeaders
       disallowRollbackApp  = app testCfgDisallowRollback
@@ -135,9 +121,7 @@ main = do
         analyzeTable "child_entities"
 
       specs = uncurry describe <$> [
-          ("Feature.Auth.AudienceJwtSecretSpec"          , Feature.Auth.AudienceJwtSecretSpec.disabledSpec)
-        , ("Feature.Auth.AuthSpec"                       , Feature.Auth.AuthSpec.spec)
-        , ("Feature.ConcurrentSpec"                      , Feature.ConcurrentSpec.spec)
+          ("Feature.ConcurrentSpec"                      , Feature.ConcurrentSpec.spec)
         , ("Feature.CorsSpec"                            , Feature.CorsSpec.spec)
         , ("Feature.CustomMediaSpec"                     , Feature.Query.CustomMediaSpec.spec)
         , ("Feature.NoSuperuserSpec"                     , Feature.NoSuperuserSpec.spec)
@@ -195,29 +179,6 @@ main = do
     parallel $ before securityOpenApi $
       describe "Feature.OpenApi.SecurityOpenApiSpec" Feature.OpenApi.SecurityOpenApiSpec.spec
 
-    -- this test runs without an anonymous role
-    parallel $ before noAnonApp $
-      describe "Feature.Auth.NoAnonSpec" Feature.Auth.NoAnonSpec.spec
-
-    -- this test runs without a JWT secret
-    parallel $ before noJwtSecretApp $
-      describe "Feature.Auth.NoJwtSecretSpec" Feature.Auth.NoJwtSecretSpec.spec
-
-    -- this test runs with a binary JWT secret
-    parallel $ before binaryJwtApp $
-      describe "Feature.Auth.BinaryJwtSecretSpec" Feature.Auth.BinaryJwtSecretSpec.spec
-
-    -- this test runs with a binary JWT secret and an audience claim
-    parallel $ before audJwtApp $
-      describe "Feature.Auth.AudienceJwtSecretSpec" Feature.Auth.AudienceJwtSecretSpec.spec
-
-    -- this test runs with asymmetric JWK
-    parallel $ before asymJwkApp $
-      describe "Feature.Auth.AsymmetricJwtSpec" Feature.Auth.AsymmetricJwtSpec.spec
-
-    -- this test runs with asymmetric JWKSet
-    parallel $ before asymJwkSetApp $
-      describe "Feature.Auth.AsymmetricJwtSpec" Feature.Auth.AsymmetricJwtSpec.spec
 
     -- this test runs with an extra search path
     parallel $ before extraSearchPathApp $ do

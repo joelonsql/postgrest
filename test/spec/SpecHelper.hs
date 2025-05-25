@@ -4,15 +4,11 @@ module SpecHelper where
 import           Control.Lens           ((^?))
 import qualified Data.Aeson             as JSON
 import           Data.Aeson.Lens
-import qualified Data.ByteString.Base64 as B64 (decodeLenient)
 import qualified Data.ByteString.Char8  as BS
 import qualified Data.ByteString.Lazy   as BL
 import qualified Data.Map.Strict        as M
 import           Data.Scientific        (toRealFloat)
 import qualified Data.Set               as S
-import qualified Jose.Jwa               as JWT
-import qualified Jose.Jws               as JWT
-import qualified Jose.Jwt               as JWT
 
 import Data.Aeson           ((.=))
 import Data.CaseInsensitive (CI (..), mk, original)
@@ -31,11 +27,9 @@ import Text.Heredoc
 
 import Data.String                       (String)
 import PostgREST.Config                  (AppConfig (..),
-                                          JSPathExp (..),
                                           LogLevel (..),
                                           LogQuery (..),
-                                          OpenAPIMode (..),
-                                          parseSecret)
+                                          OpenAPIMode (..))
 import PostgREST.SchemaCache.Identifiers (QualifiedIdentifier (..))
 import Protolude                         hiding (get, toS)
 import Protolude.Conv                    (toS)
@@ -111,7 +105,7 @@ validateOpenApiResponse headers = do
 
 
 baseCfg :: AppConfig
-baseCfg = let secret = encodeUtf8 "reallyreallyreallyreallyverysafe" in
+baseCfg =
   AppConfig {
     configAppSettings               = [ ("app.settings.app_host", "localhost") , ("app.settings.external_api_secret", "0123456789abcdef") ]
   , configDbAggregates              = False
@@ -135,12 +129,6 @@ baseCfg = let secret = encodeUtf8 "reallyreallyreallyreallyverysafe" in
   , configDbPreConfig               = Nothing
   , configDbUri                     = "postgresql://"
   , configFilePath                  = Nothing
-  , configJWKS                      = rightToMaybe $ parseSecret secret
-  , configJwtAudience               = Nothing
-  , configJwtRoleClaimKey           = [JSPKey "role"]
-  , configJwtSecret                 = Just secret
-  , configJwtSecretIsBase64         = False
-  , configJwtCacheMaxLifetime       = 0
   , configLogLevel                  = LogCrit
   , configLogQuery                  = LogQueryDisabled
   , configOpenApiMode               = OAFollowPriv
@@ -171,11 +159,6 @@ testCfgDisallowRollback = baseCfg { configDbTxAllowOverride = False, configDbTxR
 testCfgForceRollback :: AppConfig
 testCfgForceRollback = baseCfg { configDbTxAllowOverride = False, configDbTxRollbackAll = True }
 
-testCfgNoAnon :: AppConfig
-testCfgNoAnon = baseCfg { configDbAnonRole = Nothing }
-
-testCfgNoJwtSecret :: AppConfig
-testCfgNoJwtSecret = baseCfg { configJwtSecret = Nothing, configJWKS = Nothing }
 
 testUnicodeCfg :: AppConfig
 testUnicodeCfg = baseCfg { configDbSchemas = fromList ["تست"] }
@@ -198,36 +181,6 @@ testSecurityOpenApiCfg = baseCfg { configOpenApiSecurityActive = True }
 testPlanEnabledCfg :: AppConfig
 testPlanEnabledCfg = baseCfg { configDbPlanEnabled = True }
 
-testCfgBinaryJWT :: AppConfig
-testCfgBinaryJWT =
-  baseCfg {
-    configJwtSecret = Just generateSecret
-  , configJWKS = rightToMaybe $ parseSecret generateSecret
-  }
-
-testCfgAudienceJWT :: AppConfig
-testCfgAudienceJWT =
-  baseCfg {
-    configJwtSecret = Just generateSecret
-  , configJwtAudience = Just "youraudience"
-  , configJWKS = rightToMaybe $ parseSecret generateSecret
-  }
-
-testCfgAsymJWK :: AppConfig
-testCfgAsymJWK =
-  let secret = encodeUtf8 [str|{"alg":"RS256","e":"AQAB","key_ops":["verify"],"kty":"RSA","n":"0etQ2Tg187jb04MWfpuogYGV75IFrQQBxQaGH75eq_FpbkyoLcEpRUEWSbECP2eeFya2yZ9vIO5ScD-lPmovePk4Aa4SzZ8jdjhmAbNykleRPCxMg0481kz6PQhnHRUv3nF5WP479CnObJKqTVdEagVL66oxnX9VhZG9IZA7k0Th5PfKQwrKGyUeTGczpOjaPqbxlunP73j9AfnAt4XCS8epa-n3WGz1j-wfpr_ys57Aq-zBCfqP67UYzNpeI1AoXsJhD9xSDOzvJgFRvc3vm2wjAW4LEMwi48rCplamOpZToIHEPIaPzpveYQwDnB1HFTR1ove9bpKJsHmi-e2uzQ","use":"sig"}|]
-  in baseCfg {
-    configJwtSecret = Just secret
-  , configJWKS = rightToMaybe $ parseSecret secret
-  }
-
-testCfgAsymJWKSet :: AppConfig
-testCfgAsymJWKSet =
-  let secret = encodeUtf8 [str|{"keys": [{"alg":"RS256","e":"AQAB","key_ops":["verify"],"kty":"RSA","n":"0etQ2Tg187jb04MWfpuogYGV75IFrQQBxQaGH75eq_FpbkyoLcEpRUEWSbECP2eeFya2yZ9vIO5ScD-lPmovePk4Aa4SzZ8jdjhmAbNykleRPCxMg0481kz6PQhnHRUv3nF5WP479CnObJKqTVdEagVL66oxnX9VhZG9IZA7k0Th5PfKQwrKGyUeTGczpOjaPqbxlunP73j9AfnAt4XCS8epa-n3WGz1j-wfpr_ys57Aq-zBCfqP67UYzNpeI1AoXsJhD9xSDOzvJgFRvc3vm2wjAW4LEMwi48rCplamOpZToIHEPIaPzpveYQwDnB1HFTR1ove9bpKJsHmi-e2uzQ","use":"sig"}]}|]
-  in baseCfg {
-    configJwtSecret = Just secret
-  , configJWKS = rightToMaybe $ parseSecret secret
-  }
 
 testCfgExtraSearchPath :: AppConfig
 testCfgExtraSearchPath = baseCfg { configDbExtraSearchPath = ["public", "extensions", "EXTRA \"@/\\#~_-"] }
@@ -289,15 +242,6 @@ authHeader :: BS.ByteString -> BS.ByteString -> Header
 authHeader typ creds =
   (hAuthorization, typ <> " " <> creds)
 
-authHeaderJWT :: BS.ByteString -> Header
-authHeaderJWT = authHeader "Bearer"
-
-generateSecret :: ByteString
-generateSecret = B64.decodeLenient "cmVhbGx5cmVhbGx5cmVhbGx5cmVhbGx5dmVyeXNhZmU="
-
-generateJWT :: BL.ByteString -> ByteString
-generateJWT claims =
-  either mempty JWT.unJwt $ JWT.hmacEncode JWT.HS256 generateSecret (BL.toStrict claims)
 
 -- | Tests whether the text can be parsed as a json object containing
 -- the key "message", and optional keys "details", "hint", "code",

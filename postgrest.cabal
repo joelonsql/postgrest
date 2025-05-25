@@ -48,9 +48,6 @@ library
   exposed-modules:    PostgREST.Admin
                       PostgREST.App
                       PostgREST.AppState
-                      PostgREST.Auth
-                      PostgREST.Auth.JwtCache
-                      PostgREST.Auth.Types
                       PostgREST.CLI
                       PostgREST.Config
                       PostgREST.Config.Database

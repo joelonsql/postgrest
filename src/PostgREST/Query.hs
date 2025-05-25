@@ -8,10 +8,7 @@ module PostgREST.Query
   , getSQLQuery
   ) where
 
-import qualified Data.Aeson                        as JSON
-import qualified Data.Aeson.KeyMap                 as KM
 import qualified Data.ByteString                   as BS
-import qualified Data.ByteString.Lazy.Char8        as LBS
 import qualified Data.HashMap.Strict               as HM
 import qualified Data.Set                          as S
 import qualified Hasql.Decoders                    as HD
@@ -35,7 +32,6 @@ import PostgREST.ApiRequest.Preferences  (PreferCount (..),
                                           PreferTransaction (..),
                                           Preferences (..),
                                           shouldCount)
-import PostgREST.Auth.Types              (AuthResult (..))
 import PostgREST.Config                  (AppConfig (..),
                                           OpenAPIMode (..))
 import PostgREST.Config.PgVersion        (PgVersion (..))
@@ -79,18 +75,18 @@ data QueryResult
   | MaybeDbResult InspectPlan  (Maybe (TablesMap, RoutineMap, Maybe Text))
   | NoDbResult    InfoPlan
 
-query :: AppConfig -> AuthResult -> ApiRequest -> ActionPlan -> SchemaCache -> PgVersion -> Query
-query _ _ _ (NoDb x) _ _ = NoDbQuery $ NoDbResult x
-query config AuthResult{..} apiReq (Db plan) sCache pgVer =
+query :: AppConfig -> ApiRequest -> ActionPlan -> SchemaCache -> PgVersion -> Query
+query _ _ (NoDb x) _ _ = NoDbQuery $ NoDbResult x
+query config apiReq (Db plan) sCache pgVer =
   DbQuery isoLvl txMode dbHandler transaction mainSQLQuery
   where
     transaction = if prepared then SQL.transaction else SQL.unpreparedTransaction
     prepared = configDbPreparedStatements config
-    isoLvl = planIsoLvl config authRole plan
+    isoLvl = planIsoLvl config (fromMaybe "postgres" (configDbAnonRole config)) plan
     txMode = planTxMode plan
     (mainActionQuery, mainSQLQuery) = actionQuery plan config apiReq pgVer sCache
     dbHandler = do
-      setPgLocals plan config authClaims authRole apiReq
+      setPgLocals plan config (fromMaybe "postgres" (configDbAnonRole config)) apiReq
       runPreReq config
       mainActionQuery
 
@@ -264,19 +260,18 @@ optionalRollback AppConfig{..} ApiRequest{iPreferences=Preferences{..}} = do
       preferTransaction == Just Rollback
 
 -- | Set transaction scoped settings
-setPgLocals :: DbActionPlan -> AppConfig -> KM.KeyMap JSON.Value -> BS.ByteString -> ApiRequest -> DbHandler ()
-setPgLocals dbActPlan AppConfig{..} claims role ApiRequest{..} = lift $
+setPgLocals :: DbActionPlan -> AppConfig -> BS.ByteString -> ApiRequest -> DbHandler ()
+setPgLocals dbActPlan AppConfig{..} role ApiRequest{..} = lift $
   SQL.statement mempty $ SQL.dynamicallyParameterized
     -- To ensure `GRANT SET ON PARAMETER <superuser_setting> TO authenticator` works, the role settings must be set before the impersonated role.
     -- Otherwise the GRANT SET would have to be applied to the impersonated role. See https://github.com/PostgREST/postgrest/issues/3045
-    ("select " <> intercalateSnippet ", " (searchPathSql : roleSettingsSql ++ roleSql ++ claimsSql ++ [methodSql, pathSql] ++ headersSql ++ cookiesSql ++ timezoneSql ++ funcSettingsSql ++ appSettingsSql))
+    ("select " <> intercalateSnippet ", " (searchPathSql : roleSettingsSql ++ roleSql ++ [methodSql, pathSql] ++ headersSql ++ cookiesSql ++ timezoneSql ++ funcSettingsSql ++ appSettingsSql))
     HD.noResult configDbPreparedStatements
   where
     methodSql = setConfigWithConstantName ("request.method", iMethod)
     pathSql = setConfigWithConstantName ("request.path", iPath)
     headersSql = setConfigWithConstantNameJSON "request.headers" iHeaders
     cookiesSql = setConfigWithConstantNameJSON "request.cookies" iCookies
-    claimsSql = [setConfigWithConstantName ("request.jwt.claims", LBS.toStrict $ JSON.encode claims)]
     roleSql = [setConfigWithConstantName ("role", role)]
     roleSettingsSql = setConfigWithDynamicName <$> HM.toList (fromMaybe mempty $ HM.lookup role configRoleSettings)
     appSettingsSql = setConfigWithDynamicName <$> (join bimap toUtf8 <$> configAppSettings)

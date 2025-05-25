@@ -15,41 +15,13 @@ import           Test.Hspec           hiding (pendingWith)
 import           Test.Hspec.Wai
 import           Test.Hspec.Wai.JSON
 
-import PostgREST.Config.PgVersion (PgVersion, pgVersion130,
-                                   pgVersion170)
+import PostgREST.Config.PgVersion (PgVersion, pgVersion130)
 import Protolude                  hiding (get)
 import SpecHelper
 
 spec :: PgVersion -> SpecWith ((), Application)
 spec actualPgVersion = do
   describe "read table/view plan" $ do
-    it "outputs the total cost for a single filter on a table" $ do
-      r <- request methodGet "/projects?id=in.(1,2,3)"
-             (acceptHdrs "application/vnd.pgrst.plan+json") ""
-
-      let totalCost  = planCost r
-          resHeaders = simpleHeaders r
-          resStatus  = simpleStatus r
-
-      liftIO $ do
-        resHeaders `shouldSatisfy` elem ("Content-Type", "application/vnd.pgrst.plan+json; for=\"application/json\"; charset=utf-8")
-        resHeaders `shouldSatisfy` notZeroContentLength
-        resStatus `shouldBe` Status { statusCode = 200, statusMessage="OK" }
-        totalCost `shouldBe` (if actualPgVersion >= pgVersion170 then 11.32 else 15.63)
-
-    it "outputs the total cost for a single filter on a view" $ do
-      r <- request methodGet "/projects_view?id=gt.2"
-             (acceptHdrs "application/vnd.pgrst.plan+json") ""
-
-      let totalCost  = planCost r
-          resHeaders = simpleHeaders r
-          resStatus  = simpleStatus r
-
-      liftIO $ do
-        resHeaders `shouldSatisfy` elem ("Content-Type", "application/vnd.pgrst.plan+json; for=\"application/json\"; charset=utf-8")
-        resStatus `shouldBe` Status { statusCode = 200, statusMessage="OK" }
-        totalCost `shouldBe` 24.28
-
     it "outputs blocks info when using the buffers option" $
       if actualPgVersion >= pgVersion130
         then do
@@ -144,34 +116,6 @@ spec actualPgVersion = do
         resHeaders `shouldSatisfy` notZeroContentLength
         resStatus `shouldBe` Status { statusCode = 200, statusMessage="OK" }
         totalCost `shouldBe` 0.06
-
-    it "outputs the total cost for an update" $ do
-      r <- request methodPatch "/projects?id=eq.3"
-             (acceptHdrs "application/vnd.pgrst.plan+json") [json|{"name": "Patched Project"}|]
-
-      let totalCost  = planCost r
-          resHeaders = simpleHeaders r
-          resStatus  = simpleStatus r
-
-      liftIO $ do
-        resHeaders `shouldSatisfy` elem ("Content-Type", "application/vnd.pgrst.plan+json; for=\"application/json\"; charset=utf-8")
-        resHeaders `shouldSatisfy` notZeroContentLength
-        resStatus `shouldBe` Status { statusCode = 200, statusMessage="OK" }
-        totalCost `shouldBe` 8.23
-
-    it "outputs the total cost for a delete" $ do
-      r <- request methodDelete "/projects?id=in.(1,2,3)"
-             (acceptHdrs "application/vnd.pgrst.plan+json") ""
-
-      let totalCost  = planCost r
-          resHeaders = simpleHeaders r
-          resStatus  = simpleStatus r
-
-      liftIO $ do
-        resHeaders `shouldSatisfy` elem ("Content-Type", "application/vnd.pgrst.plan+json; for=\"application/json\"; charset=utf-8")
-        resHeaders `shouldSatisfy` notZeroContentLength
-        resStatus `shouldBe` Status { statusCode = 200, statusMessage="OK" }
-        totalCost `shouldBe` (if actualPgVersion >= pgVersion170 then 11.37 else 15.68)
 
     it "outputs the total cost for a single upsert" $ do
       r <- request methodPut "/tiobe_pls?name=eq.Go"

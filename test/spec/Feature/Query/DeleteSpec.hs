@@ -66,10 +66,6 @@ spec =
                            , "Content-Length" <:> "23" ]
           }
 
-      it "can rename and cast the selected columns" $
-        request methodDelete "/complex_items?id=eq.3&select=ciId:id::text,ciName:name" [("Prefer", "return=representation")] ""
-          `shouldRespondWith` [json|[{"ciId":"3","ciName":"Three"}]|]
-
       it "can embed (parent) entities" $
         request methodDelete "/tasks?id=eq.8&select=id,name,project:projects(id)" [("Prefer", "return=representation")] ""
           `shouldRespondWith` [json|[{"id":8,"name":"Code OSX","project":{"id":4}}]|]

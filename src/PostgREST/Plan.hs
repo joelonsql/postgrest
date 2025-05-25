@@ -62,8 +62,6 @@ import PostgREST.SchemaCache.Relationship    (Cardinality (..),
                                               Relationship (..),
                                               RelationshipsMap,
                                               relIsToOne)
-import PostgREST.SchemaCache.Representations (DataRepresentation (..),
-                                              RepresentationsMap)
 import PostgREST.SchemaCache.Routine         (MediaHandler (..),
                                               MediaHandlerMap,
                                               ResolvedHandler,
@@ -266,7 +264,6 @@ findProc qi argumentsKeys allProcs contentMediaType isInvPost =
 -- | ResolverContext facilitates this without the need to pass around a laundry list of parameters.
 data ResolverContext = ResolverContext
   { tables          :: TablesMap
-  , representations :: RepresentationsMap
   , qi              :: QualifiedIdentifier  -- ^ The table we're currently attending; changes as we recurse into joins etc.
   , outputType      :: Text                 -- ^ The output type for the response payload; e.g. "csv", "json", "binary".
   }
@@ -295,35 +292,13 @@ resolveTypeOrUnknown ResolverContext{..} (fn, jp) toTsV =
     res = fromMaybe (unknownField fn jp) $ HM.lookup qi tables >>=
           Just . (\t -> resolveTableFieldName t fn toTsV)
 
--- | Install any pre-defined data representation from source to target to coerce this reference.
---
--- Note that we change the IR type here. This might seem unintuitive. The short of it is that for a CoercibleField without a transformer, input type == output type. A transformer maps from a -> b, so by definition the input type will be a and the output type b after. And cfIRType is the *input* type.
---
--- It might feel odd that once a transformer is added we 'forget' the target type (because now a /= b). You might also note there's no obvious way to stack transforms (even if there was a stack, you erased what type you're working with so it's awkward). Alas as satisfying as it would be to engineer a layered mapping system with full type information, we just don't need it.
-withTransformer :: ResolverContext -> Text -> Text -> CoercibleField -> CoercibleField
-withTransformer ResolverContext{representations} sourceType targetType field =
-  fromMaybe field $ HM.lookup (sourceType, targetType) representations >>=
-    (\fieldRepresentation -> Just field{cfIRType=sourceType, cfTransform=Just (drFunction fieldRepresentation)})
-
--- | Map the intermediate representation type to the output type, if available.
-withOutputFormat :: ResolverContext -> CoercibleField -> CoercibleField
-withOutputFormat ctx@ResolverContext{outputType} field@CoercibleField{cfIRType} = withTransformer ctx cfIRType outputType field
-
--- | Map text into the intermediate representation type, if available.
-withTextParse :: ResolverContext -> CoercibleField -> CoercibleField
-withTextParse ctx field@CoercibleField{cfIRType} = withTransformer ctx "text" cfIRType field
-
--- | Map json into the intermediate representation type, if available.
-withJsonParse :: ResolverContext -> CoercibleField -> CoercibleField
-withJsonParse ctx field@CoercibleField{cfIRType} = withTransformer ctx "json" cfIRType field
-
 -- | Map the intermediate representation type to the output type defined by the resolver context (normally json), if available.
 resolveOutputField :: ResolverContext -> Field -> CoercibleField
-resolveOutputField ctx field = withOutputFormat ctx $ resolveTypeOrUnknown ctx field Nothing
+resolveOutputField ctx field = resolveTypeOrUnknown ctx field Nothing
 
 -- | Map the query string format of a value (text) into the intermediate representation type, if available.
 resolveQueryInputField :: ResolverContext -> Field -> OpExpr -> CoercibleField
-resolveQueryInputField ctx field opExpr = withTextParse ctx $ resolveTypeOrUnknown ctx field toTsVector
+resolveQueryInputField ctx field opExpr = resolveTypeOrUnknown ctx field toTsVector
   where
     toTsVector = case opExpr of
       OpExpr _ (Fts _ lang _) -> Just $ ToTsVector lang
@@ -333,10 +308,10 @@ resolveQueryInputField ctx field opExpr = withTextParse ctx $ resolveTypeOrUnkno
 -- | Adds filters, order, limits on its respective nodes.
 -- | Adds joins conditions obtained from resource embedding.
 readPlan :: QualifiedIdentifier -> AppConfig -> SchemaCache -> ApiRequest -> Either Error ReadPlanTree
-readPlan qi@QualifiedIdentifier{..} AppConfig{configDbMaxRows, configDbAggregates} SchemaCache{dbTables, dbRelationships, dbRepresentations} apiRequest  =
+readPlan qi@QualifiedIdentifier{..} AppConfig{configDbMaxRows, configDbAggregates} SchemaCache{dbTables, dbRelationships} apiRequest  =
   let
     -- JSON output format hardcoded for now. In the future we might want to support other output mappings such as CSV.
-    ctx = ResolverContext dbTables dbRepresentations qi "json"
+    ctx = ResolverContext dbTables qi "json"
   in
     treeRestrictRange configDbMaxRows (iAction apiRequest) =<<
     addToManyOrderSelects =<<
@@ -375,12 +350,11 @@ initReadRequest ctx@ResolverContext{qi=QualifiedIdentifier{..}} =
             (Node defReadPlan{from=QualifiedIdentifier qiSchema selRelation, relName=selRelation, relHint=selHint, relJoinType=selJoinType, depth=nxtDepth, relSpread=Just ToOneSpread} [])
             fldForest:rForest
         SelectField{..} ->
-          Node q{select=CoercibleSelectField (resolveOutputField ctx{qi=from q} selField) selAggregateFunction selAggregateCast selCast selAlias:select q} rForest
+          Node q{select=CoercibleSelectField (resolveOutputField ctx{qi=from q} selField) selAggregateFunction selAggregateCast Nothing selAlias:select q} rForest
 
 -- If an alias is explicitly specified, it is always respected. However, an alias may be
 -- determined automatically in these cases:
 -- * A select term with a JSON path
--- * Domain representations
 -- * Aggregates in spread relationships
 addAliases :: ReadPlanTree -> Either Error ReadPlanTree
 addAliases = Right . fmap addAliasToPlan
@@ -452,27 +426,21 @@ expandStars ctx rPlanTree = Right $ expandStarsForReadPlan False rPlanTree
     adjustContext context fromQI _ = context{qi=fromQI}
 
 expandStarsForTable :: ResolverContext -> Bool -> ReadPlan -> ReadPlan
-expandStarsForTable ctx@ResolverContext{representations, outputType} hasAgg rp@ReadPlan{select=selectFields, relSpread=spread}
-  -- We expand if either of the below are true:
-  -- * We have a '*' select AND there is an aggregate function in this ReadPlan's sub-tree.
-  -- * We have a '*' select AND the target table has at least one data representation.
+expandStarsForTable ctx hasAgg rp@ReadPlan{select=selectFields, relSpread=spread}
+  -- We expand if there is a '*' select AND there is an aggregate function in this ReadPlan's sub-tree.
   -- We ignore '*' selects that have an aggregate function attached, unless it's a `COUNT(*)` for a Spread Embed,
   -- we tag it as "full row" in that case.
-  | hasStarSelect && (hasAgg || hasDataRepresentation) = rp{select = concatMap (expandStarSelectField (isJust spread) knownColumns) selectFields}
+  | hasStarSelect && hasAgg = rp{select = concatMap (expandStarSelectField (isJust spread) knownColumns) selectFields}
   | otherwise = rp
   where
     hasStarSelect = "*" `elem` map (cfName . csField) filteredSelectFields
     filteredSelectFields = filter (shouldExpandOrTag . csAggFunction) selectFields
     shouldExpandOrTag aggFunc = isNothing aggFunc || (isJust spread && aggFunc == Just Count)
-    hasDataRepresentation = any hasOutputRep knownColumns
     knownColumns = knownColumnsInContext ctx
-
-    hasOutputRep :: Column -> Bool
-    hasOutputRep col = HM.member (colNominalType col, outputType) representations
 
     expandStarSelectField :: Bool -> [Column] -> CoercibleSelectField -> [CoercibleSelectField]
     expandStarSelectField _ columns sel@CoercibleSelectField{csField=CoercibleField{cfName="*", cfJsonPath=[]}, csAggFunction=Nothing} =
-      map (\col -> sel { csField = withOutputFormat ctx $ resolveColumnField col Nothing }) columns
+      map (\col -> sel { csField = resolveColumnField col Nothing }) columns
     expandStarSelectField True _ sel@CoercibleSelectField{csField=fld@CoercibleField{cfName="*", cfJsonPath=[]}, csAggFunction=Just Count} =
       [sel { csField = fld { cfFullRow = True } }]
     expandStarSelectField _ _ selectField = [selectField]
@@ -971,7 +939,7 @@ updateNode f (targetNodeName:remainingPath, a) (Right (Node rootNode forest)) =
     findNode = find (\(Node ReadPlan{relName, relAlias} _) -> relName == targetNodeName || relAlias == Just targetNodeName) forest
 
 mutatePlan :: Mutation -> QualifiedIdentifier -> ApiRequest -> SchemaCache -> ReadPlanTree -> Either Error MutatePlan
-mutatePlan mutation qi ApiRequest{iPreferences=Preferences{..}, ..} SchemaCache{dbTables, dbRepresentations} readReq =
+mutatePlan mutation qi ApiRequest{iPreferences=Preferences{..}, ..} SchemaCache{dbTables} readReq =
   case mutation of
     MutationCreate ->
       mapRight (\typedColumns -> Insert qi typedColumns body ((,) <$> preferResolution <*> Just confCols) [] returnings pkCols applyDefaults) typedColumnsOrError
@@ -989,7 +957,7 @@ mutatePlan mutation qi ApiRequest{iPreferences=Preferences{..}, ..} SchemaCache{
           Left $ ApiRequestError InvalidFilters
     MutationDelete -> Right $ Delete qi combinedLogic returnings
   where
-    ctx = ResolverContext dbTables dbRepresentations qi "json"
+    ctx = ResolverContext dbTables qi "json"
     confCols = fromMaybe pkCols qsOnConflict
     QueryParams.QueryParams{..} = iQueryParams
     returnings =
@@ -1004,12 +972,12 @@ mutatePlan mutation qi ApiRequest{iPreferences=Preferences{..}, ..} SchemaCache{
     combinedLogic = foldr (addFilterToLogicForest . resolveFilter ctx) logic qsFiltersRoot
     body = payRaw <$> iPayload -- the body is assumed to be json at this stage(ApiRequest validates)
     applyDefaults = preferMissing == Just ApplyDefaults
-    typedColumnsOrError = resolveOrError ctx tbl `traverse` S.toList iColumns
+    typedColumnsOrError = resolveOrError tbl `traverse` S.toList iColumns
 
-resolveOrError :: ResolverContext -> Table -> FieldName -> Either Error CoercibleField
-resolveOrError ctx table field = case resolveTableFieldName table field Nothing of
+resolveOrError :: Table -> FieldName -> Either Error CoercibleField
+resolveOrError table field = case resolveTableFieldName table field Nothing of
     CoercibleField{cfIRType=""} -> Left $ SchemaCacheErr $ ColumnNotFound (tableName table) field
-    cf                          -> Right $ withJsonParse ctx cf
+    cf                          -> Right cf
 
 callPlan :: Routine -> ApiRequest -> S.Set FieldName -> CallArgs -> ReadPlanTree -> CallPlan
 callPlan proc ApiRequest{} paramKeys args readReq = FunctionCall {

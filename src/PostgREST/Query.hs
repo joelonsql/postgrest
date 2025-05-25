@@ -32,7 +32,6 @@ import PostgREST.ApiRequest              (ApiRequest (..),
 import PostgREST.ApiRequest.Preferences  (PreferCount (..),
                                           PreferHandling (..),
                                           PreferMaxAffected (..),
-                                          PreferTimezone (..),
                                           PreferTransaction (..),
                                           Preferences (..),
                                           shouldCount)
@@ -281,7 +280,7 @@ setPgLocals dbActPlan AppConfig{..} claims role ApiRequest{..} = lift $
     roleSql = [setConfigWithConstantName ("role", role)]
     roleSettingsSql = setConfigWithDynamicName <$> HM.toList (fromMaybe mempty $ HM.lookup role configRoleSettings)
     appSettingsSql = setConfigWithDynamicName <$> (join bimap toUtf8 <$> configAppSettings)
-    timezoneSql = maybe mempty (\(PreferTimezone tz) -> [setConfigWithConstantName ("timezone", tz)]) $ preferTimezone iPreferences
+    timezoneSql = mempty
     funcSettingsSql = setConfigWithDynamicName <$> (join bimap toUtf8 <$> funcSettings)
     searchPathSql =
       let schemas = escapeIdentList (iSchema : configDbExtraSearchPath) in

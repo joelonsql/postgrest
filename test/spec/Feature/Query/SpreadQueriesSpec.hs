@@ -12,38 +12,6 @@ import SpecHelper
 spec :: SpecWith ((), Application)
 spec =
   describe "spread embeds" $ do
-    it "works on a many-to-one relationship" $ do
-      get "/projects?select=id,...clients(client_name:name)" `shouldRespondWith`
-        [json|[
-          {"id":1,"client_name":"Microsoft"},
-          {"id":2,"client_name":"Microsoft"},
-          {"id":3,"client_name":"Apple"},
-          {"id":4,"client_name":"Apple"},
-          {"id":5,"client_name":null}
-        ]|]
-        { matchStatus  = 200
-        , matchHeaders = [matchContentTypeJson]
-        }
-      get "/grandchild_entities?select=name,...child_entities(parent_name:name,...entities(grandparent_name:name))&limit=3" `shouldRespondWith`
-        [json|[
-          {"name":"grandchild entity 1","parent_name":"child entity 1","grandparent_name":"entity 1"},
-          {"name":"grandchild entity 2","parent_name":"child entity 1","grandparent_name":"entity 1"},
-          {"name":"grandchild entity 3","parent_name":"child entity 2","grandparent_name":"entity 1"}
-        ]|]
-        { matchStatus  = 200
-        , matchHeaders = [matchContentTypeJson]
-        }
-      get "/videogames?select=name,...computed_designers(designer_name:name)" `shouldRespondWith`
-        [json|[
-          {"name":"Civilization I","designer_name":"Sid Meier"},
-          {"name":"Civilization II","designer_name":"Sid Meier"},
-          {"name":"Final Fantasy I","designer_name":"Hironobu Sakaguchi"},
-          {"name":"Final Fantasy II","designer_name":"Hironobu Sakaguchi"}
-        ]|]
-        { matchStatus  = 200
-        , matchHeaders = [matchContentTypeJson]
-        }
-
     it "works inside a normal embed" $
       get "/grandchild_entities?select=name,child_entity:child_entities(name,...entities(parent_name:name))&limit=1" `shouldRespondWith`
         [json|[

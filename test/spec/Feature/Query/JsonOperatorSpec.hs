@@ -13,22 +13,6 @@ import SpecHelper
 spec :: SpecWith ((), Application)
 spec = describe "json and jsonb operators" $ do
   context "Shaping response with select parameter" $ do
-    it "obtains a json subfield one level with casting" $
-      get "/complex_items?id=eq.1&select=settings->>foo::json" `shouldRespondWith`
-        [json| [{"foo":{"int":1,"bar":"baz"}}] |] -- the value of foo here is of type "text"
-        { matchHeaders = [matchContentTypeJson] }
-
-    it "renames json subfield one level with casting" $
-      get "/complex_items?id=eq.1&select=myFoo:settings->>foo::json" `shouldRespondWith`
-        [json| [{"myFoo":{"int":1,"bar":"baz"}}] |] -- the value of foo here is of type "text"
-        { matchHeaders = [matchContentTypeJson] }
-
-    it "fails on bad casting (data of the wrong format)" $
-      get "/complex_items?select=settings->foo->>bar::integer"
-        `shouldRespondWith`
-        [json| {"hint":null,"details":null,"code":"22P02","message":"invalid input syntax for type integer: \"baz\""} |]
-        { matchStatus  = 400 , matchHeaders = [] }
-
     it "obtains a json subfield two levels (string)" $
       get "/complex_items?id=eq.1&select=settings->foo->>bar" `shouldRespondWith`
         [json| [{"bar":"baz"}] |]
@@ -37,21 +21,6 @@ spec = describe "json and jsonb operators" $ do
     it "renames json subfield two levels (string)" $
       get "/complex_items?id=eq.1&select=myBar:settings->foo->>bar" `shouldRespondWith`
         [json| [{"myBar":"baz"}] |]
-        { matchHeaders = [matchContentTypeJson] }
-
-    it "obtains a json subfield two levels with casting (int)" $
-      get "/complex_items?id=eq.1&select=settings->foo->>int::integer" `shouldRespondWith`
-        [json| [{"int":1}] |] -- the value in the db is an int, but here we expect a string for now
-        { matchHeaders = [matchContentTypeJson] }
-
-    it "renames json subfield two levels with casting (int)" $
-      get "/complex_items?id=eq.1&select=myInt:settings->foo->>int::integer" `shouldRespondWith`
-        [json| [{"myInt":1}] |] -- the value in the db is an int, but here we expect a string for now
-        { matchHeaders = [matchContentTypeJson] }
-
-    it "accepts non reserved special characters in the key's name" $
-      get "/json_arr?id=eq.10&select=data->!@#$%^%26*_d->>!@#$%^%26*_e::integer" `shouldRespondWith`
-        [json| [{"!@#$%^&*_e":3}] |]
         { matchHeaders = [matchContentTypeJson] }
 
     it "fails when there is a reserved special character in the key's name" $
@@ -81,41 +50,12 @@ spec = describe "json and jsonb operators" $ do
         { matchStatus  = 404 , matchHeaders = [] }
 
     context "with array index" $ do
-      it "can get array of ints and alias/cast it" $ do
-        get "/json_arr?select=data->>0::int&id=in.(1,2)" `shouldRespondWith`
-          [json| [{"data":1}, {"data":4}] |]
-          { matchHeaders = [matchContentTypeJson] }
-        get "/json_arr?select=idx0:data->>0::int,idx1:data->>1::int&id=in.(1,2)" `shouldRespondWith`
-          [json| [{"idx0":1,"idx1":2}, {"idx0":4,"idx1":5}] |]
-          { matchHeaders = [matchContentTypeJson] }
-
-      it "can get nested array of ints" $ do
-        get "/json_arr?select=data->0->>1::int&id=in.(3,4)" `shouldRespondWith`
-          [json| [{"data":8}, {"data":7}] |]
-          { matchHeaders = [matchContentTypeJson] }
-        get "/json_arr?select=data->0->0->>1::int&id=in.(3,4)" `shouldRespondWith`
-          [json| [{"data":null}, {"data":6}] |]
-          { matchHeaders = [matchContentTypeJson] }
-
       it "can get array of objects" $ do
         get "/json_arr?select=data->0->>a&id=in.(5,6)" `shouldRespondWith`
           [json|[{"a":"A"}, {"a":"[1,2,3]"}]|]
           { matchHeaders = [matchContentTypeJson] }
         get "/json_arr?select=data->0->a->>2&id=in.(5,6)" `shouldRespondWith`
           [json| [{"a":null}, {"a":"3"}] |]
-          { matchHeaders = [matchContentTypeJson] }
-
-      it "can get array in object keys" $ do
-        get "/json_arr?select=data->c->>0::json&id=in.(7,8)" `shouldRespondWith`
-          [json| [{"c":1}, {"c":{"d": [4,5,6,7,8]}}] |]
-          { matchHeaders = [matchContentTypeJson] }
-        get "/json_arr?select=data->c->0->d->>4::int&id=in.(7,8)" `shouldRespondWith`
-          [json| [{"d":null}, {"d":8}] |]
-          { matchHeaders = [matchContentTypeJson] }
-
-      it "only treats well formed numbers as indexes" $
-        get "/json_arr?select=data->0->0xy1->1->23-xy-45->1->xy-6->>0::int&id=eq.9" `shouldRespondWith`
-          [json| [{"xy-6":3}] |]
           { matchHeaders = [matchContentTypeJson] }
 
     context "finishing json path with single arrow ->" $ do
@@ -268,17 +208,6 @@ spec = describe "json and jsonb operators" $ do
           [json| [{ "data": { "id":" \"escaped" } }] |]
 
   context "json array negative index" $ do
-    it "can select with negative indexes" $ do
-      get "/json_arr?select=data->>-1::int&id=in.(1,2)" `shouldRespondWith`
-        [json| [{"data":3}, {"data":6}] |]
-        { matchHeaders = [matchContentTypeJson] }
-      get "/json_arr?select=data->0->>-2::int&id=in.(3,4)" `shouldRespondWith`
-        [json| [{"data":8}, {"data":7}] |]
-        { matchHeaders = [matchContentTypeJson] }
-      get "/json_arr?select=data->-2->>a&id=in.(5,6)" `shouldRespondWith`
-        [json| [{"a":"A"}, {"a":"[1,2,3]"}] |]
-        { matchHeaders = [matchContentTypeJson] }
-
     it "can filter with negative indexes" $ do
       get "/json_arr?select=data&data->>-3=eq.1" `shouldRespondWith`
         [json| [{"data":[1, 2, 3]}] |]

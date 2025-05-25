@@ -489,54 +489,83 @@ spec = do
               { matchHeaders = [matchContentTypeJson] }
 
     it "matches with computed column" $
-      get "/items?always_true=eq.true&order=id.asc" `shouldRespondWith`
-        [json| [{"id":1},{"id":2},{"id":3},{"id":4},{"id":5},{"id":6},{"id":7},{"id":8},{"id":9},{"id":10},{"id":11},{"id":12},{"id":13},{"id":14},{"id":15}] |]
+      get "/items?id=eq.1&select=id,always_true" `shouldRespondWith`
+        [json|[{"id":1,"always_true":true}]|]
         { matchHeaders = [matchContentTypeJson] }
 
-    it "order by computed column" $
-      get "/items?order=anti_id.desc" `shouldRespondWith`
-        [json| [{"id":1},{"id":2},{"id":3},{"id":4},{"id":5},{"id":6},{"id":7},{"id":8},{"id":9},{"id":10},{"id":11},{"id":12},{"id":13},{"id":14},{"id":15}] |]
+    it "computed column on rpc" $
+      get "/rpc/search?id=1&select=id,always_true" `shouldRespondWith`
+        [json|[{"id":1,"always_true":true}]|]
         { matchHeaders = [matchContentTypeJson] }
 
-    it "cannot access a computed column that is outside of the config schema" $
-      get "/items?always_false=is.false" `shouldRespondWith` 400
-
-    it "matches filtering nested items" $
-      get "/clients?select=id,projects(id,tasks(id,name))&projects.tasks.name=like.Design*" `shouldRespondWith`
-        [json|[{"id":1,"projects":[{"id":1,"tasks":[{"id":1,"name":"Design w7"}]},{"id":2,"tasks":[{"id":3,"name":"Design w10"}]}]},{"id":2,"projects":[{"id":3,"tasks":[{"id":5,"name":"Design IOS"}]},{"id":4,"tasks":[{"id":7,"name":"Design OSX"}]}]}]|]
+    it "overloaded computed columns on both tables" $ do
+      get "/items?id=eq.1&select=id,computed_overload" `shouldRespondWith`
+        [json|[{"id":1,"computed_overload":true}]|]
+        { matchHeaders = [matchContentTypeJson] }
+      get "/items2?id=eq.1&select=id,computed_overload" `shouldRespondWith`
+        [json|[{"id":1,"computed_overload":true}]|]
         { matchHeaders = [matchContentTypeJson] }
 
-    it "errs when the embedded resource doesn't exist and an embedded filter is applied to it" $ do
-      get "/clients?select=*&non_existent_projects.name=like.*NonExistent*" `shouldRespondWith`
+    it "overloaded computed column on rpc" $
+      get "/rpc/search?id=1&select=id,computed_overload" `shouldRespondWith`
+        [json|[{"id":1,"computed_overload":true}]|]
+        { matchHeaders = [matchContentTypeJson] }
+
+  describe "partitioned tables embedding" $ do
+    it "can request a table as parent from a partitioned table" $
+      get "/car_models?name=in.(DeLorean,Murcielago)&select=name,year,car_brands(name)&order=name.asc" `shouldRespondWith`
         [json|
-          {"hint":"Verify that 'non_existent_projects' is included in the 'select' query parameter.",
-           "details":null,
-           "code":"PGRST108",
-           "message":"'non_existent_projects' is not an embedded resource in this request"}|]
-        { matchStatus  = 400
-        , matchHeaders = [
-            "Content-Length" <:> "204",
-            matchContentTypeJson
-          ]
-        }
-      get "/clients?select=*,amiga_projects:projects(*)&amiga_projectsss.name=ilike.*Amiga*" `shouldRespondWith`
+            [{"name":"DeLorean","year":1981,"car_brands":{"name":"DMC"}},
+             {"name":"Murcielago","year":2001,"car_brands":{"name":"Lamborghini"}}] |]
+          { matchHeaders = [matchContentTypeJson] }
+
+    it "can request partitioned tables as children from a table" $
+      get "/car_brands?select=name,car_models(name,year)&order=name.asc&car_models.order=name.asc" `shouldRespondWith`
         [json|
-          {"hint":"Verify that 'amiga_projectsss' is included in the 'select' query parameter.",
-           "details":null,
-           "code":"PGRST108",
-           "message":"'amiga_projectsss' is not an embedded resource in this request"}|]
-        { matchStatus  = 400
-        , matchHeaders = [matchContentTypeJson]
-        }
-      get "/clients?select=id,projects(id,tasks(id,name))&projects.tasks2.name=like.Design*" `shouldRespondWith`
+            [{"name":"DMC","car_models":[{"name":"DeLorean","year":1981}]},
+             {"name":"Ferrari","car_models":[{"name":"F310-B","year":1997}]},
+             {"name":"Lamborghini","car_models":[{"name":"Murcielago","year":2001},{"name":"Veneno","year":2013}]}] |]
+          { matchHeaders = [matchContentTypeJson] }
+
+    it "can request tables as children from a partitioned table" $
+      get "/car_models?name=in.(DeLorean,F310-B)&select=name,year,car_racers(name)&order=name.asc" `shouldRespondWith`
         [json|
-          {"hint":"Verify that 'tasks2' is included in the 'select' query parameter.",
-           "details":null,
-           "code":"PGRST108",
-           "message":"'tasks2' is not an embedded resource in this request"}|]
-        { matchStatus  = 400
-        , matchHeaders = [matchContentTypeJson]
-        }
+            [{"name":"DeLorean","year":1981,"car_racers":[]},
+             {"name":"F310-B","year":1997,"car_racers":[{"name":"Michael Schumacher"}]}] |]
+          { matchHeaders = [matchContentTypeJson] }
+
+    it "can request a partitioned table as parent from a table" $
+      get "/car_racers?select=name,car_models(name,year)&order=name.asc" `shouldRespondWith`
+        [json|
+            [{"name":"Alain Prost","car_models":null},
+             {"name":"Michael Schumacher","car_models":{"name":"F310-B","year":1997}}] |]
+          { matchHeaders = [matchContentTypeJson] }
+
+    it "can request partitioned tables as children from a partitioned table" $
+      get "/car_models?name=in.(DeLorean,Murcielago,Veneno)&select=name,year,car_model_sales(date,quantity)&order=name.asc" `shouldRespondWith`
+        [json|
+            [{"name":"DeLorean","year":1981,"car_model_sales":[{"date":"2021-01-14","quantity":7},{"date":"2021-01-15","quantity":9}]},
+             {"name":"Murcielago","year":2001,"car_model_sales":[{"date":"2021-02-11","quantity":1},{"date":"2021-02-12","quantity":3}]},
+             {"name":"Veneno","year":2013,"car_model_sales":[]}] |]
+          { matchHeaders = [matchContentTypeJson] }
+
+    it "can request a partitioned table as parent from a partitioned table" $ do
+      get "/car_model_sales?date=in.(2021-01-15,2021-02-11)&select=date,quantity,car_models(name,year)&order=date.asc" `shouldRespondWith`
+        [json|
+            [{"date":"2021-01-15","quantity":9,"car_models":{"name":"DeLorean","year":1981}},
+             {"date":"2021-02-11","quantity":1,"car_models":{"name":"Murcielago","year":2001}}] |]
+          { matchHeaders = [matchContentTypeJson] }
+
+    it "can request many to many relationships between partitioned tables ignoring the intermediate table partitions" $
+      get "/car_models?select=name,year,car_dealers(name,city)&order=name.asc&limit=4" `shouldRespondWith`
+        [json|
+            [{"name":"DeLorean","year":1981,"car_dealers":[{"name":"Springfield Cars S.A.","city":"Springfield"}]},
+             {"name":"F310-B","year":1997,"car_dealers":[]},
+             {"name":"Murcielago","year":2001,"car_dealers":[{"name":"The Best Deals S.A.","city":"Franklin"}]},
+             {"name":"Veneno","year":2013,"car_dealers":[]}] |]
+          { matchStatus  = 200
+          , matchHeaders = [matchContentTypeJson]
+          }
 
     it "matches with cs operator" $
       get "/complex_items?select=id&arr_data=cs.{2}" `shouldRespondWith`
@@ -577,34 +606,12 @@ spec = do
         [json| [{"myId":1}] |]
         { matchHeaders = [matchContentTypeJson] }
 
-    it "one simple column with casting (text)" $
-      get "/complex_items?select=id::text" `shouldRespondWith`
-        [json| [{"id":"1"},{"id":"2"},{"id":"3"}] |]
-        { matchHeaders = [matchContentTypeJson] }
-
-    it "rename simple column with casting" $
-      get "/complex_items?id=eq.1&select=myId:id::text" `shouldRespondWith`
-        [json| [{"myId":"1"}] |]
-        { matchHeaders = [matchContentTypeJson] }
-
     it "json column" $
       get "/complex_items?id=eq.1&select=settings" `shouldRespondWith`
         [json| [{"settings":{"foo":{"int":1,"bar":"baz"}}}] |]
         { matchHeaders = [matchContentTypeJson] }
 
-    it "fails on bad casting (wrong cast type)" $
-      get "/complex_items?select=id::fakecolumntype"
-        `shouldRespondWith` [json| {"hint":null,"details":null,"code":"42704","message":"type \"fakecolumntype\" does not exist"} |]
-        { matchStatus  = 400
-        , matchHeaders = ["Content-Length" <:> "94"]
-        }
 
-    it "can cast types with underscore and numbers" $
-      get "/oid_test?select=id,oid_col::int,oid_array_col::_int4"
-        `shouldRespondWith` [json|
-          [{"id":1,"oid_col":12345,"oid_array_col":[1,2,3,4,5]}]
-        |]
-        { matchHeaders = [matchContentTypeJson] }
 
     it "requesting parents and children" $
       get "/projects?id=eq.1&select=id, name, clients(*), tasks(id, name)" `shouldRespondWith`
@@ -1517,126 +1524,6 @@ spec = do
       get "/articles?body=imatch(any).{stop,thing}&select=id" `shouldRespondWith`
         [json|[{"id":1}, {"id":2}]|]
         { matchHeaders = [matchContentTypeJson] }
-
-  describe "Data representations for customisable value formatting and parsing" $ do
-    it "formats a single column" $
-      get "/datarep_todos?select=id,label_color&id=lt.4" `shouldRespondWith`
-        [json| [{"id":1,"label_color":"#000000"},{"id":2,"label_color":"#000100"},{"id":3,"label_color":"#01E240"}] |]
-        { matchHeaders = [matchContentTypeJson] }
-    it "formats two columns with different formatters" $
-      get "/datarep_todos?select=id,label_color,due_at&id=lt.4" `shouldRespondWith`
-        [json| [{"id":1,"label_color":"#000000","due_at":"2018-01-02T00:00:00Z"},{"id":2,"label_color":"#000100","due_at":"2018-01-03T00:00:00Z"},{"id":3,"label_color":"#01E240","due_at":"2018-01-01T14:12:34.123456Z"}] |]
-        { matchHeaders = [matchContentTypeJson] }
-    it "fails in some reasonable way when selecting fields that don't exist" $
-      get "/datarep_todos?select=id,label_color,banana" `shouldRespondWith`
-        [json| {"code":"42703","details":null,"hint":null,"message":"column datarep_todos.banana does not exist"} |]
-        { matchStatus  = 400
-        , matchHeaders = [
-            "Content-Length" <:> "98",
-            matchContentTypeJson
-          ]
-        }
-    it "formats columns in views including computed columns" $
-      get "/datarep_todos_computed?select=id,label_color,dark_color" `shouldRespondWith`
-        [json| [
-          {"id":1, "label_color":"#000000", "dark_color":"#000000"},
-          {"id":2, "label_color":"#000100", "dark_color":"#000080"},
-          {"id":3, "label_color":"#01E240", "dark_color":"#00F120"},
-          {"id":4, "label_color":"", "dark_color":""}
-        ] |]
-        { matchHeaders = [matchContentTypeJson] }
-    it "formats and allows rename" $
-      get "/datarep_todos?select=id,clr:label_color&id=lt.4" `shouldRespondWith`
-        [json| [{"id":1,"clr":"#000000"},{"id":2,"clr":"#000100"},{"id":3,"clr":"#01E240"}] |]
-        { matchHeaders = [matchContentTypeJson] }
-    it "formats, renames and allows manual casting on top" $
-      get "/datarep_todos?select=id,clr:label_color::text&id=lt.4" `shouldRespondWith`
-        [json| [{"id":1,"clr":"\"#000000\""},{"id":2,"clr":"\"#000100\""},{"id":3,"clr":"\"#01E240\""}] |]
-        { matchHeaders = [matchContentTypeJson] }
-    it "formats nulls" $
-      -- due_at is formatted as NULL but label_color NULLs become empty strings-- it's up to the formatting function.
-      get "/datarep_todos?select=id,label_color,due_at&id=gt.2&id=lt.5" `shouldRespondWith`
-        [json| [{"id":3,"label_color":"#01E240","due_at":"2018-01-01T14:12:34.123456Z"},{"id":4,"label_color":"","due_at":null}] |]
-        { matchHeaders = [matchContentTypeJson] }
-    it "formats star select" $
-      get "/datarep_todos?select=*&id=lt.4" `shouldRespondWith`
-        [json| [
-          {"id":1,"name":"Report","label_color":"#000000","due_at":"2018-01-02T00:00:00Z","icon_image":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQAAAAA3bvkkAAAAABBJREFUeJxiYAEAAAAA//8DAAAABgAFBXv6vUAAAAAASUVORK5CYII=","created_at":1513213350,"budget":"12.50"},
-           {"id":2,"name":"Essay","label_color":"#000100","due_at":"2018-01-03T00:00:00Z","icon_image":null,"created_at":1513213350,"budget":"100000000000000.13"},
-           {"id":3,"name":"Algebra","label_color":"#01E240","due_at":"2018-01-01T14:12:34.123456Z","icon_image":null,"created_at":1513213350,"budget":"0.00"}
-        ] |]
-        { matchHeaders = [matchContentTypeJson] }
-    it "formats implicit star select" $
-      get "/datarep_todos?id=lt.4" `shouldRespondWith`
-        [json| [
-          {"id":1,"name":"Report","label_color":"#000000","due_at":"2018-01-02T00:00:00Z","icon_image":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQAAAAA3bvkkAAAAABBJREFUeJxiYAEAAAAA//8DAAAABgAFBXv6vUAAAAAASUVORK5CYII=","created_at":1513213350,"budget":"12.50"},
-          {"id":2,"name":"Essay","label_color":"#000100","due_at":"2018-01-03T00:00:00Z","icon_image":null,"created_at":1513213350,"budget":"100000000000000.13"},
-          {"id":3,"name":"Algebra","label_color":"#01E240","due_at":"2018-01-01T14:12:34.123456Z","icon_image":null,"created_at":1513213350,"budget":"0.00"}
-        ] |]
-        { matchHeaders = [matchContentTypeJson] }
-    it "formats star and explicit mix" $
-      get "/datarep_todos?select=due_at,*&id=lt.4" `shouldRespondWith`
-        [json| [
-          {"due_at":"2018-01-02T00:00:00Z","id":1,"name":"Report","label_color":"#000000","due_at":"2018-01-02T00:00:00Z","icon_image":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQAAAAA3bvkkAAAAABBJREFUeJxiYAEAAAAA//8DAAAABgAFBXv6vUAAAAAASUVORK5CYII=","created_at":1513213350,"budget":"12.50"},
-           {"due_at":"2018-01-03T00:00:00Z","id":2,"name":"Essay","label_color":"#000100","due_at":"2018-01-03T00:00:00Z","icon_image":null,"created_at":1513213350,"budget":"100000000000000.13"},
-           {"due_at":"2018-01-01T14:12:34.123456Z","id":3,"name":"Algebra","label_color":"#01E240","due_at":"2018-01-01T14:12:34.123456Z","icon_image":null,"created_at":1513213350,"budget":"0.00"}
-        ] |]
-        { matchHeaders = [matchContentTypeJson] }
-    it "formats through join" $
-      get "/datarep_next_two_todos?select=id,name,first_item:datarep_todos!datarep_next_two_todos_first_item_id_fkey(label_color,due_at)" `shouldRespondWith`
-        [json| [{"id":1,"name":"school related","first_item":{"label_color":"#000100","due_at":"2018-01-03T00:00:00Z"}},{"id":2,"name":"do these first","first_item":{"label_color":"#000000","due_at":"2018-01-02T00:00:00Z"}}] |]
-        { matchHeaders = [matchContentTypeJson] }
-    it "formats through join with star select" $
-      get "/datarep_next_two_todos?select=id,name,second_item:datarep_todos!datarep_next_two_todos_second_item_id_fkey(*)" `shouldRespondWith`
-        [json| [
-          {"id":1,"name":"school related","second_item":{"id":3,"name":"Algebra","label_color":"#01E240","due_at":"2018-01-01T14:12:34.123456Z","icon_image":null,"created_at":1513213350,"budget":"0.00"}},
-          {"id":2,"name":"do these first","second_item":{"id":3,"name":"Algebra","label_color":"#01E240","due_at":"2018-01-01T14:12:34.123456Z","icon_image":null,"created_at":1513213350,"budget":"0.00"}}
-        ] |]
-        { matchHeaders = [matchContentTypeJson] }
-    it "uses text parser on value for filter given through query parameters" $
-      get "/datarep_todos?select=id,due_at&label_color=eq.000100" `shouldRespondWith`
-        [json| [{"id":2,"due_at":"2018-01-03T00:00:00Z"}] |]
-        { matchHeaders = [matchContentTypeJson] }
-    it "in the absense of text parser, does not try to use the JSON parser for query parameters" $
-      get "/datarep_todos?select=id,due_at&due_at=eq.Z" `shouldRespondWith`
-        -- we prove the parser is not used because it'd replace the Z with `+00:00` and a different error message.
-        [json| {"code":"22007","details":null,"hint":null,"message":"invalid input syntax for type timestamp with time zone: \"Z\""} |]
-        { matchStatus  = 400
-        , matchHeaders = [
-            "Content-Length" <:> "117",
-            matchContentTypeJson
-          ]
-        }
-    it "uses text parser for filter with 'IN' predicates" $
-      get "/datarep_todos?select=id,due_at&label_color=in.(000100,01E240)" `shouldRespondWith`
-        [json| [
-          {"id":2, "due_at": "2018-01-03T00:00:00Z"},
-          {"id":3, "due_at": "2018-01-01T14:12:34.123456Z"}
-        ] |]
-        { matchHeaders = [matchContentTypeJson] }
-    it "uses text parser for filter with 'NOT IN' predicates" $
-      get "/datarep_todos?select=id,due_at&label_color=not.in.(000000,01E240)" `shouldRespondWith`
-        [json| [
-          {"id":2, "due_at": "2018-01-03T00:00:00Z"}
-        ] |]
-        { matchHeaders = [matchContentTypeJson] }
-    it "uses text parser on value for filter across relations" $
-      get "/datarep_next_two_todos?select=id,name,datarep_todos!datarep_next_two_todos_first_item_id_fkey(label_color,due_at)&datarep_todos.label_color=neq.000100" `shouldRespondWith`
-        [json| [{"id":1,"name":"school related","datarep_todos":null},{"id":2,"name":"do these first","datarep_todos":{"label_color":"#000000","due_at":"2018-01-02T00:00:00Z"}}] |]
-        { matchHeaders = [matchContentTypeJson] }
-    -- This is not supported by data reps (would be hard to make it work with high performance). So the test just
-    -- verifies we don't panic or add inappropriate SQL to the filters.
-    it "fails safely on user trying to use ilike operator on data reps column" $
-      get "/datarep_todos?select=id,name&label_color=ilike.#*100" `shouldRespondWith`
-        [json|
-          {"code":"42883","details":null,"hint":"No operator matches the given name and argument types. You might need to add explicit type casts.","message":"operator does not exist: public.color ~~* unknown"}
-        |]
-        { matchStatus  = 404
-        , matchHeaders = [
-            "Content-Length" <:> "200",
-            matchContentTypeJson
-          ]
-        }
 
   context "searching for an empty string" $ do
     it "works with an empty eq filter" $

@@ -249,9 +249,6 @@ pgFmtColumn :: QualifiedIdentifier -> Text -> SQL.Snippet
 pgFmtColumn table "*" = fromQi table <> ".*"
 pgFmtColumn table c   = fromQi table <> "." <> pgFmtIdent c
 
-pgFmtCallUnary :: Text -> SQL.Snippet -> SQL.Snippet
-pgFmtCallUnary f x = SQL.sql (encodeUtf8 f) <> "(" <> x <> ")"
-
 pgFmtField :: QualifiedIdentifier -> CoercibleField -> SQL.Snippet
 pgFmtField table cf = case cfToTsVector cf of
   Just (ToTsVector lang) -> "to_tsvector(" <> pgFmtFtsLang lang <> fmtFld <> ")"
@@ -263,14 +260,12 @@ pgFmtField table cf = case cfToTsVector cf of
       CoercibleField{cfName=fn, cfToJson=doToJson, cfJsonPath=jp} | doToJson  -> "to_jsonb(" <> pgFmtColumn table fn <> ")" <> pgFmtJsonPath jp
                                                                   | otherwise -> pgFmtColumn table fn <> pgFmtJsonPath jp
 
--- Select the value of a named element from a table, applying its optional coercion mapping if any.
+-- Select the value of a named element from a table.
 pgFmtTableCoerce :: QualifiedIdentifier -> CoercibleField -> SQL.Snippet
-pgFmtTableCoerce table fld@(CoercibleField{cfTransform=(Just formatterProc)}) = pgFmtCallUnary formatterProc (pgFmtField table fld)
 pgFmtTableCoerce table f = pgFmtField table f
 
 -- | Like the previous but now we just have a name so no namespace or JSON paths.
 pgFmtCoerceNamed :: CoercibleField -> SQL.Snippet
-pgFmtCoerceNamed CoercibleField{cfName=fn, cfTransform=(Just formatterProc)} = pgFmtCallUnary formatterProc (pgFmtIdent fn) <> " AS " <> pgFmtIdent fn
 pgFmtCoerceNamed CoercibleField{cfName=fn} = pgFmtIdent fn
 
 pgFmtSelectItem :: QualifiedIdentifier -> CoercibleSelectField -> SQL.Snippet
@@ -367,20 +362,13 @@ pgFmtOrderTerm qi ot =
     nullOrder OrderNullsFirst = "NULLS FIRST"
     nullOrder OrderNullsLast  = "NULLS LAST"
 
--- | Interpret a literal in the way the planner indicated through the CoercibleField.
+-- | Interpret a literal as-is since data representations were removed.
 pgFmtUnknownLiteralForField :: SQL.Snippet -> CoercibleField -> SQL.Snippet
-pgFmtUnknownLiteralForField value CoercibleField{cfTransform=(Just parserProc)} = pgFmtCallUnary parserProc value
--- But when no transform is requested, we just use the literal as-is.
 pgFmtUnknownLiteralForField value _ = value
 
--- | Array version of the above, used by ANY().
+-- | Array version of the above.
 pgFmtArrayLiteralForField :: [Text] -> CoercibleField -> SQL.Snippet
--- When a transformation is requested, we need to apply the transformation to each element of the array. This could be done by just making a query with `parser(value)` for each value, but may lead to huge query lengths. Imagine `data_representations.color_from_text('...'::text)` for repeated for a hundred values. Instead we use `unnest()` to unpack a standard array literal and then apply the transformation to each element, like a map.
--- Note the literals will be treated as text since in every case when we use ANY() the parameters are textual (coming from a query string). We want to rely on the `text->domain` parser to do the right thing.
-pgFmtArrayLiteralForField values CoercibleField{cfTransform=(Just parserProc)} = SQL.sql "(SELECT " <> pgFmtCallUnary parserProc (SQL.sql "unnest(" <> unknownLiteral (pgBuildArrayLiteral values) <> "::text[])") <> ")"
--- When no transformation is requested, we don't need a subquery.
 pgFmtArrayLiteralForField values _ = unknownLiteral (pgBuildArrayLiteral values)
-
 
 pgFmtFilter :: QualifiedIdentifier -> CoercibleFilter -> SQL.Snippet
 pgFmtFilter _ (CoercibleFilterNullEmbed hasNot fld) = pgFmtIdent fld <> " IS " <> (if not hasNot then "NOT " else mempty) <> "DISTINCT FROM NULL"

@@ -80,12 +80,6 @@ allowed =
              {"total_charged":"3200","project_id":3},
              {"total_charged":"1200","project_id":2},
              {"total_charged":"300","project_id":1}]|] { matchHeaders = [matchContentTypeJson] }
-      it "allows you to cast the input argument of the aggregate" $
-        get "/trash_details?select=jsonb_col->>key::integer.sum()" `shouldRespondWith`
-          [json|[{"sum": 24}]|] { matchHeaders = [matchContentTypeJson] }
-      it "allows the combination of an alias, a before cast, and an after cast" $
-        get "/trash_details?select=s:jsonb_col->>key::integer.sum()::text" `shouldRespondWith`
-          [json|[{"s": "24"}]|] { matchHeaders = [matchContentTypeJson] }
       it "supports use of aggregates on RPC functions that return table values" $
         get "/rpc/getallprojects?select=id.max()" `shouldRespondWith`
           [json|[{"max": 5}]|] { matchHeaders = [matchContentTypeJson] }

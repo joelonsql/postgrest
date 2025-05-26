@@ -12,7 +12,6 @@ module PostgREST.ApiRequest
   , DbAction(..)
   , Payload(..)
   , userApiRequest
-  , userPreferences
   ) where
 
 import qualified Data.Aeson            as JSON
@@ -56,7 +55,6 @@ import PostgREST.SchemaCache.Identifiers (FieldName,
                                           QualifiedIdentifier (..),
                                           Schema)
 
-import qualified PostgREST.ApiRequest.Preferences as Preferences
 import qualified PostgREST.ApiRequest.QueryParams as QueryParams
 import qualified PostgREST.MediaType              as MediaType
 
@@ -107,7 +105,6 @@ data ApiRequest = ApiRequest {
   , iRange               :: HM.HashMap Text NonnegRange      -- ^ Requested range of rows within response
   , iTopLevelRange       :: NonnegRange                      -- ^ Requested range of rows from the top level
   , iPayload             :: Maybe Payload                    -- ^ Data sent by client and used for mutation actions
-  , iPreferences         :: Preferences.Preferences          -- ^ Prefer header values
   , iQueryParams         :: QueryParams.QueryParams
   , iColumns             :: S.Set FieldName                  -- ^ parsed colums from &columns parameter and payload
   , iHeaders             :: [(ByteString, ByteString)]       -- ^ HTTP request headers
@@ -121,8 +118,8 @@ data ApiRequest = ApiRequest {
   }
 
 -- | Examines HTTP request and translates it into user intent.
-userApiRequest :: AppConfig -> Preferences.Preferences -> Request -> RequestBody -> Either ApiRequestError ApiRequest
-userApiRequest conf prefs req reqBody = do
+userApiRequest :: AppConfig -> Request -> RequestBody -> Either ApiRequestError ApiRequest
+userApiRequest conf req reqBody = do
   resource <- getResource conf $ pathInfo req
   (schema, negotiatedByProfile) <- getSchema conf hdrs method
   act <- getAction resource schema method
@@ -134,7 +131,6 @@ userApiRequest conf prefs req reqBody = do
   , iRange = ranges
   , iTopLevelRange = topLevelRange
   , iPayload = payload
-  , iPreferences = prefs
   , iQueryParams = qPrms
   , iColumns = columns
   , iHeaders = iHdrs
@@ -155,9 +151,6 @@ userApiRequest conf prefs req reqBody = do
     contentMediaType = maybe MTApplicationJSON MediaType.decodeMediaType $ lookupHeader "content-type"
     actIsInvokeSafe x = case x of {ActDb (ActRoutine _  (InvRead _)) -> True; _ -> False}
 
--- | Parses the Prefer header
-userPreferences :: AppConfig -> Request -> Preferences.Preferences
-userPreferences conf req = Preferences.fromHeaders (configDbTxAllowOverride conf) $ requestHeaders req
 
 getResource :: AppConfig -> [Text] -> Either ApiRequestError Resource
 getResource AppConfig{configOpenApiMode, configDbRootSpec} = \case

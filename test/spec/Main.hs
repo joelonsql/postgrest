@@ -34,12 +34,10 @@ import qualified Feature.Query.CustomMediaSpec
 import qualified Feature.Query.ErrorSpec
 import qualified Feature.Query.MultipleSchemaSpec
 import qualified Feature.Query.PlanSpec
-import qualified Feature.Query.PreferencesSpec
 import qualified Feature.Query.RangeSpec
 import qualified Feature.Query.RawOutputTypesSpec
 import qualified Feature.Query.RpcSpec
 import qualified Feature.Query.ServerTimingSpec
-import qualified Feature.RollbackSpec
 import qualified Feature.RpcPreRequestGucsSpec
 
 
@@ -82,8 +80,6 @@ main = do
       proxyApp             = app testProxyCfg
       rootSpecApp          = app testCfgRootSpec
       responseHeadersApp   = app testCfgResponseHeaders
-      disallowRollbackApp  = app testCfgDisallowRollback
-      forceRollbackApp     = app testCfgForceRollback
       planEnabledApp       = app testPlanEnabledCfg
       obsApp               = app testObservabilityCfg
       serverTiming         = app testCfgServerTiming
@@ -106,7 +102,6 @@ main = do
         , ("Feature.OptionsSpec"                         , Feature.OptionsSpec.spec)
         , ("Feature.Query.PgErrorCodeMappingSpec"        , Feature.Query.ErrorSpec.pgErrorCodeMapping)
         , ("Feature.Query.PlanSpec.disabledSpec"         , Feature.Query.PlanSpec.disabledSpec)
-        , ("Feature.Query.PreferencesSpec"               , Feature.Query.PreferencesSpec.spec)
         , ("Feature.Query.RawOutputTypesSpec"            , Feature.Query.RawOutputTypesSpec.spec)
         , ("Feature.Query.RpcSpec"                       , Feature.Query.RpcSpec.spec)
         ]
@@ -168,16 +163,8 @@ main = do
     -- this results in race conditions
 
     -- this test runs with tx-rollback-all = true and tx-allow-override = true
-    before withApp $
-      describe "Feature.RollbackAllowedSpec" Feature.RollbackSpec.allowed
-
-    -- this test runs with tx-rollback-all = false and tx-allow-override = false
-    before disallowRollbackApp $
-      describe "Feature.RollbackDisallowedSpec" Feature.RollbackSpec.disallowed
-
-    -- this test runs with tx-rollback-all = true and tx-allow-override = false
-    before forceRollbackApp $
-      describe "Feature.RollbackForcedSpec" Feature.RollbackSpec.forced
+    before withApp $ do
+      return ()
 
   where
     loadSCache pool conf =

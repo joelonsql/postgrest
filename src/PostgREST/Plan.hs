@@ -72,7 +72,6 @@ import PostgREST.SchemaCache.Table           (Column (..), Table (..),
                                               TablesMap,
                                               tableColumnsList)
 
-import PostgREST.ApiRequest.Preferences
 import PostgREST.ApiRequest.Types
 import PostgREST.Plan.CallPlan
 import PostgREST.Plan.ReadPlan          as ReadPlan
@@ -126,7 +125,7 @@ dbActionPlan dbAct conf apiReq sCache = case dbAct of
 
 
 callReadPlan :: QualifiedIdentifier -> AppConfig -> SchemaCache -> ApiRequest -> InvokeMethod -> Either Error CallReadPlan
-callReadPlan identifier conf sCache apiRequest@ApiRequest{iPreferences=Preferences{preferHandling, invalidPrefs},..} invMethod = do
+callReadPlan identifier conf sCache apiRequest@ApiRequest{..} invMethod = do
   let paramKeys = case invMethod of
         InvRead _ -> S.fromList $ fst <$> qsParams'
         Inv       -> iColumns
@@ -145,7 +144,6 @@ callReadPlan identifier conf sCache apiRequest@ApiRequest{iPreferences=Preferenc
           (Inv, Routine.Volatile)  -> SQL.Write
       cPlan = callPlan proc apiRequest paramKeys args rPlan
   (handler, mediaType)  <- mapLeft ApiRequestError $ negotiateContent conf apiRequest relIdentifier iAcceptMediaType (dbMediaHandlers sCache) (hasDefaultSelect rPlan)
-  if not (null invalidPrefs) && preferHandling == Just Strict then Left $ ApiRequestError $ InvalidPreferences invalidPrefs else Right ()
   return $ CallReadPlan rPlan cPlan txMode proc handler mediaType invMethod identifier
   where
     qsParams' = QueryParams.qsParams iQueryParams

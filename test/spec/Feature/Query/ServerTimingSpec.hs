@@ -17,7 +17,7 @@ spec =
     context "responds with Server-Timing header" $ do
       it "works with a successful request" $
         request methodPost "/rpc/ret_point_overloaded"
-          [("Prefer","return=representation")]
+          []
           [json|{"x": 1, "y": 2, "z": 3}|]
           `shouldRespondWith`
           [json|1|]

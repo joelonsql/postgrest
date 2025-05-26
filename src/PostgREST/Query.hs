@@ -24,9 +24,6 @@ import qualified PostgREST.SchemaCache        as SchemaCache
 
 
 import PostgREST.ApiRequest              (ApiRequest (..))
-import PostgREST.ApiRequest.Preferences  (PreferMaxAffected (..),
-                                          PreferTransaction (..),
-                                          Preferences (..))
 import PostgREST.Config                  (AppConfig (..),
                                           OpenAPIMode (..))
 import PostgREST.Config.PgVersion        (PgVersion (..))
@@ -96,7 +93,7 @@ planIsoLvl AppConfig{configRoleIsoLvl} role actPlan = case actPlan of
 -- TODO: Generate the Hasql Statement in a diferent module after the OpenAPI functionality is removed
 actionQuery :: DbActionPlan -> AppConfig -> ApiRequest -> PgVersion -> SchemaCache -> (DbHandler QueryResult, ByteString)
 
-actionQuery (DbCall plan@CallReadPlan{..}) conf@AppConfig{..} apiReq@ApiRequest{iPreferences=Preferences{..}} pgVer _ =
+actionQuery (DbCall plan@CallReadPlan{..}) conf@AppConfig{..} _ pgVer _ =
   (mainActionQuery, mainSQLQuery)
   where
     (result, mainSQLQuery) = Statements.prepareCall
@@ -110,9 +107,8 @@ actionQuery (DbCall plan@CallReadPlan{..}) conf@AppConfig{..} apiReq@ApiRequest{
       configDbPreparedStatements
     mainActionQuery = do
       resultSet <- lift $ SQL.statement mempty result
-      optionalRollback conf apiReq
+      optionalRollback conf
       failNotSingular crMedia resultSet
-      failExceedsMaxAffectedPref preferMaxAffected resultSet
       pure $ DbCallResult plan resultSet
 
 actionQuery (MaybeDb plan@InspectPlan{ipSchema=tSchema}) AppConfig{..} _ _ sCache =
@@ -144,24 +140,12 @@ failNotSingular mediaType RSStandard{rsQueryTotal=queryTotal} =
     lift SQL.condemn
     throwError $ Error.ApiRequestError . Error.SingularityError $ toInteger queryTotal
 
-failExceedsMaxAffectedPref :: Maybe PreferMaxAffected -> ResultSet -> DbHandler ()
-failExceedsMaxAffectedPref Nothing _ = pure ()
-failExceedsMaxAffectedPref _ RSPlan{} = pure ()
-failExceedsMaxAffectedPref (Just (PreferMaxAffected n)) RSStandard{rsQueryTotal=queryTotal} = when (queryTotal > n) $ do
-  lift SQL.condemn
-  throwError $ Error.ApiRequestError . Error.MaxAffectedViolationError $ toInteger queryTotal
-
 -- | Set a transaction to roll back if requested
-optionalRollback :: AppConfig -> ApiRequest -> DbHandler ()
-optionalRollback AppConfig{..} ApiRequest{iPreferences=Preferences{..}} = do
-  lift $ when (shouldRollback || (configDbTxRollbackAll && not shouldCommit)) $ do
+optionalRollback :: AppConfig -> DbHandler ()
+optionalRollback AppConfig{..} = do
+  lift $ when configDbTxRollbackAll $ do
     SQL.sql "SET CONSTRAINTS ALL IMMEDIATE"
     SQL.condemn
-  where
-    shouldCommit =
-      preferTransaction == Just Commit
-    shouldRollback =
-      preferTransaction == Just Rollback
 
 -- | Set transaction scoped settings
 setPgLocals :: DbActionPlan -> AppConfig -> BS.ByteString -> ApiRequest -> DbHandler ()

@@ -23,8 +23,6 @@ import qualified PostgREST.Response.OpenAPI as OpenAPI
 
 import PostgREST.ApiRequest              (ApiRequest (..),
                                           InvokeMethod (..))
-import PostgREST.ApiRequest.Preferences  (Preferences (..),
-                                          prefAppliedHeader)
 import PostgREST.Config                  (AppConfig (..))
 import PostgREST.MediaType               (MediaType (..))
 import PostgREST.Plan                    (CallReadPlan (..),
@@ -51,7 +49,7 @@ data PgrstResponse = PgrstResponse {
 
 actionResponse :: QueryResult -> ApiRequest -> (Text, Text) -> AppConfig -> SchemaCache -> Schema -> Bool -> Either Error.Error PgrstResponse
 
-actionResponse (DbCallResult CallReadPlan{crMedia, crInvMthd=invMethod, crProc=proc} resultSet) ctxApiRequest@ApiRequest{iPreferences=Preferences{..},..} _ _ _ _ _ = case resultSet of
+actionResponse (DbCallResult CallReadPlan{crMedia, crInvMthd=invMethod, crProc=proc} resultSet) ctxApiRequest@ApiRequest{..} _ _ _ _ _ = case resultSet of
   RSStandard {..} -> do
     let
       (status, contentRange) =
@@ -61,9 +59,8 @@ actionResponse (DbCallResult CallReadPlan{crMedia, crInvMthd=invMethod, crProc=p
           $ Error.OutOfBounds (show $ RangeQuery.rangeOffset iTopLevelRange) (maybe "0" show rsTableTotal)
         else LBS.fromStrict rsBody
       isHeadMethod = invMethod == InvRead True
-      prefHeader = maybeToList . prefAppliedHeader $ Preferences Nothing Nothing preferCount preferTransaction Nothing preferHandling preferMaxAffected []
       cLHeader = if isHeadMethod then mempty else [contentLengthHeaderLazy rsOrErrBody]
-      headers = contentRange : prefHeader
+      headers = [contentRange]
 
     let (status', headers', body) =
           if Routine.funcReturnsVoid proc then

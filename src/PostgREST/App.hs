@@ -135,9 +135,7 @@ postgrestResponse appState conf@AppConfig{..} maybeSchemaCache pgVer req = do
 
   body <- lift $ Wai.strictRequestBody req
 
-  let prefs = ApiRequest.userPreferences conf req
-
-  (parseTime, apiReq@ApiRequest{..}) <- withTiming $ liftEither . mapLeft Error.ApiRequestError $ ApiRequest.userApiRequest conf prefs req body
+  (parseTime, apiReq@ApiRequest{..}) <- withTiming $ liftEither . mapLeft Error.ApiRequestError $ ApiRequest.userApiRequest conf req body
   (planTime, plan)                   <- withTiming $ liftEither $ Plan.actionPlan iAction conf apiReq sCache
 
   let query = Query.query conf apiReq plan sCache pgVer

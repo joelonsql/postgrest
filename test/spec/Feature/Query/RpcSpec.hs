@@ -466,29 +466,6 @@ spec =
         request methodPatch "/rpc/sayhello" [] ""
           `shouldRespondWith` 405
 
-    it "executes the proc exactly once per request" $ do
-      -- callcounter is persistent even with rollback, because it uses a sequence
-      -- reset counter first to make test repeatable
-      request methodPost "/rpc/reset_sequence"
-          [("Prefer", "tx=commit")]
-          [json|{"name": "callcounter_count", "value": 1}|]
-        `shouldRespondWith`
-          ""
-          { matchStatus = 204
-          , matchHeaders = [ matchHeaderAbsent hContentType
-                           , matchHeaderAbsent hContentLength]
-          }
-
-      -- now the test
-      post "/rpc/callcounter"
-          [json|{}|]
-        `shouldRespondWith`
-          [json|1|]
-
-      post "/rpc/callcounter"
-          [json|{}|]
-        `shouldRespondWith`
-          [json|2|]
 
     context "a proc that receives no parameters" $ do
       it "interprets empty string as empty json object on a post request" $

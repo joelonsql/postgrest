@@ -11,7 +11,6 @@ to produce SqlQuery type outputs.
 -}
 module PostgREST.Query.QueryBuilder
   ( readPlanToQuery
-  , mutatePlanToQuery
   , readPlanToCountQuery
   , callPlanToQuery
   , limitedQuery
@@ -27,7 +26,6 @@ import qualified Hasql.Encoders                  as HE
 import Data.Maybe (fromJust)
 import Data.Tree  (Tree (..))
 
-import PostgREST.ApiRequest.Preferences   (PreferResolution (..))
 import PostgREST.Config.PgVersion         (PgVersion, pgVersion130)
 import PostgREST.SchemaCache.Identifiers  (QualifiedIdentifier (..))
 import PostgREST.SchemaCache.Relationship (Cardinality (..),
@@ -37,7 +35,6 @@ import PostgREST.SchemaCache.Routine      (RoutineParam (..))
 
 import PostgREST.ApiRequest.Types
 import PostgREST.Plan.CallPlan
-import PostgREST.Plan.MutatePlan
 import PostgREST.Plan.ReadPlan
 import PostgREST.Plan.Types
 import PostgREST.Query.SqlFragment
@@ -119,55 +116,6 @@ getJoin fld node@(Node ReadPlan{relJoinType, relSpread} _) =
       JsonEmbed{rsEmbedMode = JsonArray} ->
         correlatedSubquery (selectSubqAgg <> fromSubqAgg) aggAlias joinCondition
 
-mutatePlanToQuery :: MutatePlan -> SQL.Snippet
-mutatePlanToQuery (Insert mainQi iCols body onConflict putConditions returnings _ applyDefaults) =
-  "INSERT INTO " <> fromQi mainQi <> (if null iCols then " " else "(" <> cols <> ") ") <>
-  fromJsonBodyF body iCols True False applyDefaults <>
-  -- Only used for PUT
-  (if null putConditions then mempty else "WHERE " <> addConfigPgrstInserted True <> " AND " <> intercalateSnippet " AND " (pgFmtLogicTree (QualifiedIdentifier mempty "pgrst_body") <$> putConditions)) <>
-  (if null putConditions && mergeDups then "WHERE " <> addConfigPgrstInserted True else mempty) <>
-  maybe mempty (\(oncDo, oncCols) ->
-    if null oncCols then
-      mempty
-    else
-      " ON CONFLICT(" <> intercalateSnippet ", " (pgFmtIdent <$> oncCols) <> ") " <> case oncDo of
-      IgnoreDuplicates ->
-        "DO NOTHING"
-      MergeDuplicates  ->
-        if null iCols
-           then "DO NOTHING"
-           else "DO UPDATE SET " <> intercalateSnippet ", " ((pgFmtIdent . cfName) <> const " = EXCLUDED." <> (pgFmtIdent . cfName) <$> iCols) <> (if null putConditions && not mergeDups then mempty else "WHERE " <> addConfigPgrstInserted False)
-    ) onConflict <> " " <>
-    returningF mainQi returnings
-  where
-    cols = intercalateSnippet ", " $ pgFmtIdent . cfName <$> iCols
-    mergeDups = case onConflict of {Just (MergeDuplicates,_) -> True; _ -> False;}
-
-mutatePlanToQuery (Update mainQi uCols body logicForest returnings applyDefaults)
-  | null uCols =
-    -- if there are no columns we cannot do UPDATE table SET {empty}, it'd be invalid syntax
-    -- selecting an empty resultset from mainQi gives us the column names to prevent errors when using &select=
-    -- the select has to be based on "returnings" to make computed overloaded functions not throw
-    "SELECT " <> emptyBodyReturnedColumns <> " FROM " <> fromQi mainQi <> " WHERE false"
-
-  | otherwise =
-    "UPDATE " <> mainTbl <> " SET " <> cols <> " " <>
-    fromJsonBodyF body uCols False False applyDefaults <>
-    whereLogic <> " " <>
-    returningF mainQi returnings
-
-  where
-    whereLogic = if null logicForest then mempty else " WHERE " <> intercalateSnippet " AND " (pgFmtLogicTree mainQi <$> logicForest)
-    mainTbl = fromQi mainQi
-    emptyBodyReturnedColumns = if null returnings then "NULL" else intercalateSnippet ", " (pgFmtColumn (QualifiedIdentifier mempty $ qiName mainQi) <$> returnings)
-    cols = intercalateSnippet ", " (pgFmtIdent . cfName <> const " = " <> pgFmtColumn (QualifiedIdentifier mempty "pgrst_body") . cfName <$> uCols)
-
-mutatePlanToQuery (Delete mainQi logicForest returnings) =
-  "DELETE FROM " <> fromQi mainQi <> " " <>
-  whereLogic <> " " <>
-  returningF mainQi returnings
-  where
-    whereLogic = if null logicForest then mempty else " WHERE " <> intercalateSnippet " AND " (pgFmtLogicTree mainQi <$> logicForest)
 
 callPlanToQuery :: CallPlan -> PgVersion -> SQL.Snippet
 callPlanToQuery (FunctionCall qi params arguments returnsScalar returnsSetOfScalar returnsCompositeAlias filterFields returnings) pgVer =

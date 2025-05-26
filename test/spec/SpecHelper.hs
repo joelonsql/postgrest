@@ -152,11 +152,6 @@ baseCfg =
 testCfg :: AppConfig
 testCfg = baseCfg
 
-testCfgDisallowRollback :: AppConfig
-testCfgDisallowRollback = baseCfg { configDbTxAllowOverride = False, configDbTxRollbackAll = False }
-
-testCfgForceRollback :: AppConfig
-testCfgForceRollback = baseCfg { configDbTxAllowOverride = False, configDbTxRollbackAll = True }
 
 
 testUnicodeCfg :: AppConfig

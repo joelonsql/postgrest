@@ -72,13 +72,11 @@ library
                       PostgREST.Query.Statements
                       PostgREST.Plan
                       PostgREST.Plan.CallPlan
-                      PostgREST.Plan.MutatePlan
                       PostgREST.Plan.ReadPlan
                       PostgREST.Plan.Types
                       PostgREST.RangeQuery
                       PostgREST.Unix
                       PostgREST.ApiRequest
-                      PostgREST.ApiRequest.Preferences
                       PostgREST.ApiRequest.QueryParams
                       PostgREST.ApiRequest.Types
                       PostgREST.Response
@@ -213,12 +211,10 @@ test-suite spec
                       Feature.Query.ErrorSpec
                       Feature.Query.MultipleSchemaSpec
                       Feature.Query.PlanSpec
-                      Feature.Query.PreferencesSpec
                       Feature.Query.RangeSpec
                       Feature.Query.RawOutputTypesSpec
                       Feature.Query.RpcSpec
                       Feature.Query.ServerTimingSpec
-                      Feature.RollbackSpec
                       Feature.RpcPreRequestGucsSpec
                       SpecHelper
   build-depends:      base              >= 4.9 && < 4.20

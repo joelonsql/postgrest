@@ -8,9 +8,7 @@ This module constructs single SQL statements that can be parametrized and prepar
 - It generates the body format and some headers of the final HTTP response.
 -}
 module PostgREST.Query.Statements
-  ( prepareWrite
-  , prepareRead
-  , prepareCall
+  ( prepareCall
   , preparePlanRows
   , ResultSet (..)
   ) where
@@ -24,7 +22,6 @@ import qualified Hasql.Statement                   as SQL
 
 import Control.Lens ((^?))
 
-import PostgREST.ApiRequest.Preferences
 import PostgREST.MediaType              (MTVndPlanFormat (..),
                                          MediaType (..))
 import PostgREST.Query.SqlFragment
@@ -54,69 +51,6 @@ data ResultSet
   }
   | RSPlan BS.ByteString -- ^ the plan of the query
 
-
-prepareWrite :: SQL.Snippet -> SQL.Snippet -> Bool -> Bool -> MediaType -> MediaHandler ->
-                Maybe PreferRepresentation -> Maybe PreferResolution -> [Text] -> Bool -> (SQL.Statement () ResultSet, ByteString)
-prepareWrite selectQuery mutateQuery isInsert isPut mt handler rep resolution pKeys prepared =
- (result, sql)
- where
-  result@(SQL.Statement sql _ _ _) = SQL.dynamicallyParameterized (mtSnippet mt snippet) decodeIt prepared
-  checkUpsert snip = if isInsert && (isPut || resolution == Just MergeDuplicates) then snip else "''"
-  pgrstInsertedF = checkUpsert "nullif(current_setting('pgrst.inserted', true),'')::int"
-  snippet =
-    "WITH " <> sourceCTE <> " AS (" <> mutateQuery <> ") " <>
-    "SELECT " <>
-      "'' AS total_result_set, " <>
-      "pg_catalog.count(_postgrest_t) AS page_total, " <>
-      locF <> " AS header, " <>
-      handlerF Nothing handler <> " AS body, " <>
-      responseHeadersF <> " AS response_headers, " <>
-      responseStatusF  <> " AS response_status, " <>
-      pgrstInsertedF <> " AS response_inserted " <>
-    "FROM (" <> selectF <> ") _postgrest_t"
-
-  locF =
-    if isInsert && rep == Just HeadersOnly
-      then
-        "CASE WHEN pg_catalog.count(_postgrest_t) = 1 " <>
-          "THEN coalesce(" <> locationF pKeys <> ", " <> noLocationF <> ") " <>
-          "ELSE " <> noLocationF <> " " <>
-        "END"
-      else noLocationF
-
-  selectF
-    -- prevent using any of the column names in ?select= when no response is returned from the CTE
-    | handler == NoAgg = "SELECT * FROM " <> sourceCTE
-    | otherwise        = selectQuery
-
-  decodeIt :: HD.Result ResultSet
-  decodeIt = case mt of
-    MTVndPlan{} -> planRow
-    _           -> fromMaybe (RSStandard Nothing 0 mempty mempty Nothing Nothing Nothing) <$> HD.rowMaybe (standardRow False)
-
-prepareRead :: SQL.Snippet -> SQL.Snippet -> Bool -> MediaType -> MediaHandler -> Bool -> (SQL.Statement () ResultSet, ByteString)
-prepareRead selectQuery countQuery countTotal mt handler prepared =
- (result, sql)
- where
-  result@(SQL.Statement sql _ _ _) = SQL.dynamicallyParameterized (mtSnippet mt snippet) decodeIt prepared
-  snippet =
-    "WITH " <> sourceCTE <> " AS ( " <> selectQuery <> " ) " <>
-    countCTEF <> " " <>
-    "SELECT " <>
-      countResultF <> " AS total_result_set, " <>
-      "pg_catalog.count(_postgrest_t) AS page_total, " <>
-      handlerF Nothing handler <> " AS body, " <>
-      responseHeadersF <> " AS response_headers, " <>
-      responseStatusF <> " AS response_status, " <>
-      "''" <> " AS response_inserted " <>
-    "FROM ( SELECT * FROM " <> sourceCTE <> " ) _postgrest_t"
-
-  (countCTEF, countResultF) = countF countQuery countTotal
-
-  decodeIt :: HD.Result ResultSet
-  decodeIt = case mt of
-    MTVndPlan{} -> planRow
-    _           -> HD.singleRow $ standardRow True
 
 prepareCall :: Routine -> SQL.Snippet -> SQL.Snippet -> SQL.Snippet -> Bool ->
                MediaType -> MediaHandler -> Bool ->

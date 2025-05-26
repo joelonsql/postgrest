@@ -76,7 +76,6 @@ data ApiRequestError
   | MediaTypeError [ByteString]
   | InvalidBody ByteString
   | InvalidFilters
-  | InvalidPreferences [ByteString]
   | InvalidRange RangeError
   | InvalidRpcMethod ByteString
   | NotEmbedded Text
@@ -117,7 +116,6 @@ instance PgrstError ApiRequestError where
   status MediaTypeError{}            = HTTP.status406
   status InvalidBody{}               = HTTP.status400
   status InvalidFilters              = HTTP.status405
-  status InvalidPreferences{}        = HTTP.status400
   status InvalidRpcMethod{}          = HTTP.status405
   status InvalidRange{}              = HTTP.status416
 
@@ -177,7 +175,6 @@ instance ErrorBody ApiRequestError where
   -- code SpreadNotToOne              = "PGRST109" -- no longer used
   code UnacceptableFilter{}        = "PGRST120"
   code PGRSTParseError{}           = "PGRST121"
-  code InvalidPreferences{}        = "PGRST122"
   code AggregatesNotAllowed        = "PGRST123"
   code MaxAffectedViolationError{} = "PGRST124"
   code InvalidResourcePath         = "PGRST125"
@@ -202,7 +199,6 @@ instance ErrorBody ApiRequestError where
   message (RelatedOrderNotToOne _ target) = "A related order on '" <> target <> "' is not possible"
   message (UnacceptableFilter target)    = "Bad operator on the '" <> target <> "' embedded resource"
   message (PGRSTParseError _)            = "Could not parse JSON in the \"RAISE SQLSTATE 'PGRST'\" error"
-  message (InvalidPreferences _)         = "Invalid preferences given with handling=strict"
   message AggregatesNotAllowed           = "Use of aggregate functions is not allowed"
   message (MaxAffectedViolationError _)  = "Query result exceeds max-affected preference constraint"
   message InvalidResourcePath            = "Invalid path specified in request URL"
@@ -220,7 +216,6 @@ instance ErrorBody ApiRequestError where
   details (RelatedOrderNotToOne origin target) = Just $ JSON.String $ "'" <> origin <> "' and '" <> target <> "' do not form a many-to-one or one-to-one relationship"
   details (UnacceptableFilter _)      = Just "Only is null or not is null filters are allowed on embedded resources"
   details (PGRSTParseError raiseErr) = Just $ JSON.String $ pgrstParseErrorDetails raiseErr
-  details (InvalidPreferences prefs) = Just $ JSON.String $ T.decodeUtf8 ("Invalid preferences: " <> BS.intercalate ", " prefs)
   details (MaxAffectedViolationError n) = Just $ JSON.String $ T.unwords ["The query affects", show n, "rows"]
   details (NotImplemented details') = Just $ JSON.String details'
 

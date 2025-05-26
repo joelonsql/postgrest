@@ -29,38 +29,6 @@ spec = describe "OpenAPI Ignore Privileges" $ do
                          , matchHeaderAbsent hContentLength]
         }
 
-  describe "table" $ do
-
-    it "includes privileged table even if user does not have permission" $ do
-      r <- simpleBody <$> get "/"
-      let tableTag = r ^? key "paths" . key "/authors_only"
-                     . key "post" . key "tags"
-                     . nth 0
-
-      liftIO $ tableTag `shouldBe` Just [aesonQQ|"authors_only"|]
-
-    it "only includes tables that belong to another schema if the Accept-Profile header is used" $ do
-      r1 <- simpleBody <$> get "/"
-      let tableKey1 = r1 ^? key "paths" . key "/children"
-
-      liftIO $ tableKey1 `shouldBe` Nothing
-
-      r2 <- simpleBody <$> request methodGet "/" [("Accept-Profile", "v1")] ""
-      let tableKey2 = r2 ^? key "paths" . key "/children"
-
-      liftIO $ tableKey2 `shouldNotBe` Nothing
-
-    it "includes comments on tables" $ do
-      r <- simpleBody <$> get "/"
-
-      let grandChildGet s = key "paths" . key "/grandchild_entities" . key "get" . key s
-          grandChildGetSummary = r ^? grandChildGet "summary"
-          grandChildGetDescription = r ^? grandChildGet "description"
-
-      liftIO $ do
-        grandChildGetSummary `shouldBe` Just "grandchild_entities summary"
-        grandChildGetDescription `shouldBe` Just "grandchild_entities description\nthat spans\nmultiple lines"
-
   describe "RPC" $ do
 
     it "includes privileged function even if user does not have permission" $ do

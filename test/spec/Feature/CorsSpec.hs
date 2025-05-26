@@ -28,7 +28,7 @@ spec =
           }
 
     it "exposes necesssary response headers to regular request" $
-      request methodGet "/items"
+      request methodPost "/rpc/hello"
           [("Origin", "http://example.com")]
           ""
         `shouldRespondWith`
@@ -41,7 +41,7 @@ spec =
           }
 
     it "allows INFO body through even with CORS request headers present to postflight request" $ do
-      request methodOptions "/items"
+      request methodOptions "/rpc/hello"
           [ ("Host", "localhost:3000")
           , ("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:32.0) Gecko/20100101 Firefox/32.0")
           , ("Origin", "http://localhost:8000")

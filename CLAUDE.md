@@ -6,11 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PostgREST is a REST API server written in Haskell that automatically generates a RESTful API from any PostgreSQL database schema. It's built for performance using the Warp HTTP server and the Hasql database library with PostgreSQL's binary protocol.
 
+We are working on removing all features from PostgREST except RPC and OpenAPI.
+
 ## Development Commands
 
 ### Build System
 - **Nix (Recommended)**: `nix develop` to enter development shell
-- **Cabal**: `cabal v2-build`, `cabal v2-run postgrest`, `cabal v2-test`
 - **Stack**: `stack build`, `stack exec postgrest`
 
 ### Testing Commands
@@ -21,6 +22,8 @@ PostgREST is a REST API server written in Haskell that automatically generates a
 - `postgrest-test-replica` - Replica database tests
 - `postgrest-coverage` - Full test suite with coverage
 - `postgrest-test-memory` - Memory usage tests
+
+To build and test, run this command: `PGDATABASE=postgrest_test PGHOST=localhost PGUSER=joel stack test`
 
 ### Code Quality
 - `postgrest-style` - Auto-format Haskell, Nix, Python files

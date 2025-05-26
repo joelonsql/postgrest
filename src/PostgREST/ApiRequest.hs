@@ -7,7 +7,6 @@ Description : PostgREST functions to translate HTTP request to a domain type cal
 module PostgREST.ApiRequest
   ( ApiRequest(..)
   , InvokeMethod(..)
-  , Mutation(..)
   , MediaType(..)
   , Action(..)
   , DbAction(..)
@@ -82,22 +81,17 @@ data Payload
   | RawPay  { payRaw  :: LBS.ByteString }
 
 data InvokeMethod = Inv | InvRead Bool  deriving Eq
-data Mutation = MutationCreate | MutationDelete | MutationSingleUpsert | MutationUpdate deriving Eq
 
 data Resource
-  = ResourceRelation Text
-  | ResourceRoutine Text
+  = ResourceRoutine Text
   | ResourceSchema
 
 data DbAction
-  = ActRelationRead {dbActQi :: QualifiedIdentifier, actHeadersOnly :: Bool}
-  | ActRelationMut  {dbActQi :: QualifiedIdentifier, actMutation :: Mutation}
-  | ActRoutine      {dbActQi :: QualifiedIdentifier, actInvMethod :: InvokeMethod}
+  = ActRoutine      {dbActQi :: QualifiedIdentifier, actInvMethod :: InvokeMethod}
   | ActSchemaRead   Schema Bool
 
 data Action
   = ActDb           DbAction
-  | ActRelationInfo QualifiedIdentifier
   | ActRoutineInfo  QualifiedIdentifier InvokeMethod
   | ActSchemaInfo
 
@@ -173,7 +167,6 @@ getResource AppConfig{configOpenApiMode, configDbRootSpec} = \case
         (_, Just qi)   -> Right $ ResourceRoutine (qiName qi)
         (_, Nothing)   -> Right ResourceSchema
 
-  [table]        -> Right $ ResourceRelation table
   ["rpc", pName] -> Right $ ResourceRoutine pName
   _              -> Left InvalidResourcePath
 
@@ -185,14 +178,6 @@ getAction resource schema method =
     (ResourceRoutine rout, "POST")    -> Right . ActDb $ ActRoutine (qi rout) Inv
     (ResourceRoutine rout, "OPTIONS") -> Right $ ActRoutineInfo (qi rout) $ InvRead True
     (ResourceRoutine _, _)            -> Left $ InvalidRpcMethod method
-
-    (ResourceRelation rel, "HEAD")    -> Right . ActDb $ ActRelationRead (qi rel) True
-    (ResourceRelation rel, "GET")     -> Right . ActDb $ ActRelationRead (qi rel) False
-    (ResourceRelation rel, "POST")    -> Right . ActDb $ ActRelationMut  (qi rel) MutationCreate
-    (ResourceRelation rel, "PUT")     -> Right . ActDb $ ActRelationMut  (qi rel) MutationSingleUpsert
-    (ResourceRelation rel, "PATCH")   -> Right . ActDb $ ActRelationMut  (qi rel) MutationUpdate
-    (ResourceRelation rel, "DELETE")  -> Right . ActDb $ ActRelationMut  (qi rel) MutationDelete
-    (ResourceRelation rel, "OPTIONS") -> Right $ ActRelationInfo (qi rel)
 
     (ResourceSchema, "HEAD")          -> Right . ActDb $ ActSchemaRead schema True
     (ResourceSchema, "GET")           -> Right . ActDb $ ActSchemaRead schema False
@@ -275,14 +260,10 @@ getPayload reqBody contentMediaType QueryParams{qsColumns} action = do
       (ct, _) -> Left $ "Content-Type not acceptable: " <> MediaType.toMime ct
 
     shouldParsePayload = case action of
-      ActDb (ActRelationMut _ MutationDelete) -> False
-      ActDb (ActRelationMut _ _)              -> True
       ActDb (ActRoutine _  Inv)               -> True
       _                                       -> False
 
     columns = case action of
-      ActDb (ActRelationMut _ MutationCreate) -> qsColumns
-      ActDb (ActRelationMut _ MutationUpdate) -> qsColumns
       ActDb (ActRoutine     _ Inv)            -> qsColumns
       _                                       -> Nothing
 

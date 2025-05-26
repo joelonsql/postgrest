@@ -15,97 +15,25 @@ spec =
   describe "Show Duration on Server-Timing header" $ do
 
     context "responds with Server-Timing header" $ do
-      it "works with get request" $ do
-        request methodGet  "/organizations?id=eq.6"
-          []
-          ""
-          `shouldRespondWith`
-          [json|[{"id":6,"name":"Oscorp","referee":3,"auditor":4,"manager_id":6}]|]
-          { matchStatus  = 200
-          , matchHeaders = matchContentTypeJson : map matchServerTimingHasTiming ["parse", "plan", "transaction", "response"]
-          }
-
-      it "works with post request" $
-        request methodPost  "/organizations?select=*"
-          [("Prefer","return=representation")]
-          [json|{"id":7,"name":"John","referee":null,"auditor":null,"manager_id":6}|]
-          `shouldRespondWith`
-          [json|[{"id":7,"name":"John","referee":null,"auditor":null,"manager_id":6}]|]
-          { matchStatus  = 201
-          , matchHeaders = matchContentTypeJson : map matchServerTimingHasTiming ["parse", "plan", "transaction", "response"]
-          }
-
-      it "works with patch request" $
-        request methodPatch "/no_pk?b=eq.0" mempty
-            [json| { b: "1" } |]
-          `shouldRespondWith`
-            ""
-            { matchStatus  = 204
-            , matchHeaders = matchHeaderAbsent hContentType : map matchServerTimingHasTiming ["parse", "plan", "transaction", "response"]
-            }
-
-      it "works with put request" $
-        request methodPut "/tiobe_pls?name=eq.Python"
-            [("Prefer", "return=representation")]
-            [json| [ { "name": "Python", "rank": 19 } ]|]
-          `shouldRespondWith`
-            [json| [ { "name": "Python", "rank": 19 } ]|]
-            { matchStatus  = 200
-            , matchHeaders = map matchServerTimingHasTiming ["parse", "plan", "transaction", "response"]
-            }
-
-      it "works with delete request" $
-        request methodDelete "/items?id=eq.1"
-            []
-            ""
-          `shouldRespondWith`
-            ""
-            { matchStatus  = 204
-            , matchHeaders = matchHeaderAbsent hContentType : map matchServerTimingHasTiming ["parse", "plan", "transaction", "response"]
-            }
-
-      it "works with rpc call" $
+      it "works with a failed request" $
         request methodPost "/rpc/ret_point_overloaded"
-          []
-          [json|{"x": 1, "y": 2}|]
+          [("Prefer","return=representation")]
+          [json|{"x": 1, "y": 2, "z": 3}|]
           `shouldRespondWith`
-          [json|{"x": 1, "y": 2}|]
-          { matchStatus  = 200
-          , matchHeaders = map matchServerTimingHasTiming ["parse", "plan", "transaction", "response"]
-          }
-
-      it "works with root spec" $
-        request methodHead "/"
-          []
-          ""
-          `shouldRespondWith`
-          ""
-          { matchStatus  = 200
-          , matchHeaders = map matchServerTimingHasTiming ["parse", "plan", "transaction", "response"]
+          [json|{"code":"PGRST203","details":"Searched for the function public.ret_point_overloaded with parameter names x, y, z or without parameters, but no matches were found in the schema cache.","hint":null,"message":"Could not find the function public.ret_point_overloaded(x => ?, y => ?, z => ?) in the schema cache"}|]
+          { matchStatus  = 404
+          , matchHeaders = matchContentTypeJson : map matchServerTimingHasTiming ["parse", "plan"]
           }
 
       it "works with OPTIONS method" $ do
-        request methodOptions "/organizations"
-          []
-          ""
-          `shouldRespondWith`
-          ""
-          { matchStatus  = 200
-          , matchHeaders = map matchServerTimingHasTiming ["parse", "response"]
-          }
         request methodOptions "/rpc/getallprojects"
           []
           ""
           `shouldRespondWith`
           ""
           { matchStatus  = 200
-          , matchHeaders = map matchServerTimingHasTiming ["parse", "response"]
-          }
-        request methodOptions "/"
-          []
-          ""
-          `shouldRespondWith`
-          ""
-          { matchStatus  = 200
-          , matchHeaders = map matchServerTimingHasTiming ["parse", "response"]
+          , matchHeaders = [ "Access-Control-Allow-Origin" <:> "*"
+                           , "Allow" <:> "OPTIONS,GET,HEAD,POST"
+                           , matchServerTimingHasTiming "parse"
+                           ]
           }

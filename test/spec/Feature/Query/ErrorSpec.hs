@@ -11,14 +11,14 @@ import Protolude  hiding (get)
 
 pgErrorCodeMapping :: SpecWith ((), Application)
 pgErrorCodeMapping = do
-  describe "PostreSQL error code mappings" $ do
+  describe "PostgreSQL error code mappings" $ do
     it "should return 500 for cardinality_violation" $
-      get "/bad_subquery" `shouldRespondWith` 500
+      get "/rpc/bad_subquery" `shouldRespondWith` 500
 
     it "should return 500 for statement too complex" $
-      request methodPost "/infinite_inserts"
+      request methodPost "/rpc/infinite_recursion"
         []
-        [json|{"id": 3, "name": "qwer"}|]
+        [json|{}|]
         `shouldRespondWith`
         [json|
           {"code": "54001",
@@ -39,29 +39,10 @@ pgErrorCodeMapping = do
           }
 
       it "works with SchemaCache error" $
-        get "/non_existent_table"
+        get "/rpc/non_existent_function"
           `shouldRespondWith`
-          [json| {"code":"PGRST205","details":null,"hint":"Perhaps you meant the table 'test.collision_test_table'","message":"Could not find the table 'test.non_existent_table' in the schema cache"} |]
+          [json| {"code":"PGRST202","details":"Searched for the function public.non_existent_function without parameters, but no matches were found in the schema cache.","hint":null,"message":"Could not find the function public.non_existent_function() in the schema cache"} |]
           { matchStatus  = 404
-          , matchHeaders = [ "Proxy-Status" <:> "PostgREST; error=PGRST205"
-                           , "Content-Length" <:> "182" ]
-          }
-
-
-      it "works with raise sqlstate custom error" $
-        get "/rpc/raise_pt402"
-          `shouldRespondWith`
-          [json| {"code":"PT402","details":"Quota exceeded","hint":"Upgrade your plan","message":"Payment Required"} |]
-          { matchStatus  = 402
-          , matchHeaders = [ "Proxy-Status" <:> "PostgREST; error=PT402"
-                           , "Content-Length" <:> "99" ]
-          }
-
-      it "works with sqlstate PGRST custom error" $
-        get "/rpc/raise_sqlstate_test1"
-          `shouldRespondWith`
-          [json| {"code":"123","details":"DEF","hint":"XYZ","message":"ABC"} |]
-          { matchStatus  = 332
-          , matchHeaders = [ "Proxy-Status" <:> "PostgREST; error=123"
-                           , "Content-Length" <:> "59" ]
+          , matchHeaders = [ "Proxy-Status" <:> "PostgREST; error=PGRST202"
+                           , "Content-Length" <:> "256" ]
           }

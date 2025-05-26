@@ -12,7 +12,6 @@ import qualified Data.ByteString                   as BS
 import qualified Data.HashMap.Strict               as HM
 import qualified Data.Set                          as S
 import qualified Hasql.Decoders                    as HD
-import qualified Hasql.DynamicStatements.Snippet   as SQL (Snippet)
 import qualified Hasql.DynamicStatements.Statement as SQL
 import qualified Hasql.Session                     as SQL (Session)
 import qualified Hasql.Transaction                 as SQL
@@ -24,14 +23,10 @@ import qualified PostgREST.Query.Statements   as Statements
 import qualified PostgREST.SchemaCache        as SchemaCache
 
 
-import PostgREST.ApiRequest              (ApiRequest (..),
-                                          Mutation (..))
-import PostgREST.ApiRequest.Preferences  (PreferCount (..),
-                                          PreferHandling (..),
-                                          PreferMaxAffected (..),
+import PostgREST.ApiRequest              (ApiRequest (..))
+import PostgREST.ApiRequest.Preferences  (PreferMaxAffected (..),
                                           PreferTransaction (..),
-                                          Preferences (..),
-                                          shouldCount)
+                                          Preferences (..))
 import PostgREST.Config                  (AppConfig (..),
                                           OpenAPIMode (..))
 import PostgREST.Config.PgVersion        (PgVersion (..))
@@ -39,11 +34,9 @@ import PostgREST.Error                   (Error)
 import PostgREST.MediaType               (MediaType (..))
 import PostgREST.Plan                    (ActionPlan (..),
                                           CallReadPlan (..),
-                                          CrudPlan (..),
                                           DbActionPlan (..),
                                           InfoPlan (..),
                                           InspectPlan (..))
-import PostgREST.Plan.MutatePlan         (MutatePlan (..))
 import PostgREST.Query.SqlFragment       (escapeIdentList, fromQi,
                                           intercalateSnippet,
                                           setConfigWithConstantName,
@@ -70,8 +63,7 @@ data Query
   | NoDbQuery QueryResult
 
 data QueryResult
-  = DbCrudResult  CrudPlan ResultSet
-  | DbCallResult  CallReadPlan  ResultSet
+  = DbCallResult  CallReadPlan  ResultSet
   | MaybeDbResult InspectPlan  (Maybe (TablesMap, RoutineMap, Maybe Text))
   | NoDbResult    InfoPlan
 
@@ -91,7 +83,6 @@ query config apiReq (Db plan) sCache pgVer =
       mainActionQuery
 
 planTxMode :: DbActionPlan -> SQL.Mode
-planTxMode (DbCrud x)  = pTxMode x
 planTxMode (DbCall x)  = crTxMode x
 planTxMode (MaybeDb x) = ipTxmode x
 
@@ -104,59 +95,6 @@ planIsoLvl AppConfig{configRoleIsoLvl} role actPlan = case actPlan of
 
 -- TODO: Generate the Hasql Statement in a diferent module after the OpenAPI functionality is removed
 actionQuery :: DbActionPlan -> AppConfig -> ApiRequest -> PgVersion -> SchemaCache -> (DbHandler QueryResult, ByteString)
-actionQuery (DbCrud plan@WrappedReadPlan{..}) conf@AppConfig{..} apiReq@ApiRequest{iPreferences=Preferences{..}} _ _ =
-  (mainActionQuery, mainSQLQuery)
-  where
-    countQuery = QueryBuilder.readPlanToCountQuery wrReadPlan
-    (result, mainSQLQuery) = Statements.prepareRead
-      (QueryBuilder.readPlanToQuery wrReadPlan)
-      (if preferCount == Just EstimatedCount then
-         -- LIMIT maxRows + 1 so we can determine below that maxRows was surpassed
-         QueryBuilder.limitedQuery countQuery ((+ 1) <$> configDbMaxRows)
-       else
-         countQuery
-      )
-      (shouldCount preferCount)
-      wrMedia
-      wrHandler
-      configDbPreparedStatements
-    mainActionQuery = do
-      resultSet <- lift $ SQL.statement mempty result
-      failNotSingular wrMedia resultSet
-      optionalRollback conf apiReq
-      DbCrudResult plan <$> resultSetWTotal conf apiReq resultSet countQuery
-
-actionQuery (DbCrud plan@MutateReadPlan{..}) conf@AppConfig{..} apiReq@ApiRequest{iPreferences=Preferences{..}} _ _ =
-  (mainActionQuery, mainSQLQuery)
-  where
-    (isPut, isInsert, pkCols) = case mrMutatePlan of {Insert{where_,insPkCols} -> ((not . null) where_, True, insPkCols); _ -> (False,False, mempty);}
-    (result, mainSQLQuery) = Statements.prepareWrite
-      (QueryBuilder.readPlanToQuery mrReadPlan)
-      (QueryBuilder.mutatePlanToQuery mrMutatePlan)
-      isInsert
-      isPut
-      mrMedia
-      mrHandler
-      preferRepresentation
-      preferResolution
-      pkCols
-      configDbPreparedStatements
-    failMutation resultSet = case mrMutation of
-      MutationCreate -> do
-        failNotSingular mrMedia resultSet
-      MutationUpdate -> do
-        failNotSingular mrMedia resultSet
-        failExceedsMaxAffectedPref (preferMaxAffected,preferHandling) resultSet
-      MutationSingleUpsert -> do
-        failPut resultSet
-      MutationDelete -> do
-        failNotSingular mrMedia resultSet
-        failExceedsMaxAffectedPref (preferMaxAffected,preferHandling) resultSet
-    mainActionQuery = do
-      resultSet <- lift $ SQL.statement mempty result
-      failMutation resultSet
-      optionalRollback conf apiReq
-      pure $ DbCrudResult plan resultSet
 
 actionQuery (DbCall plan@CallReadPlan{..}) conf@AppConfig{..} apiReq@ApiRequest{iPreferences=Preferences{..}} pgVer _ =
   (mainActionQuery, mainSQLQuery)
@@ -166,7 +104,7 @@ actionQuery (DbCall plan@CallReadPlan{..}) conf@AppConfig{..} apiReq@ApiRequest{
       (QueryBuilder.callPlanToQuery crCallPlan pgVer)
       (QueryBuilder.readPlanToQuery crReadPlan)
       (QueryBuilder.readPlanToCountQuery crReadPlan)
-      (shouldCount preferCount)
+      False
       crMedia
       crHandler
       configDbPreparedStatements
@@ -174,7 +112,7 @@ actionQuery (DbCall plan@CallReadPlan{..}) conf@AppConfig{..} apiReq@ApiRequest{
       resultSet <- lift $ SQL.statement mempty result
       optionalRollback conf apiReq
       failNotSingular crMedia resultSet
-      failExceedsMaxAffectedPref (preferMaxAffected,preferHandling) resultSet
+      failExceedsMaxAffectedPref preferMaxAffected resultSet
       pure $ DbCallResult plan resultSet
 
 actionQuery (MaybeDb plan@InspectPlan{ipSchema=tSchema}) AppConfig{..} _ _ sCache =
@@ -196,40 +134,6 @@ actionQuery (MaybeDb plan@InspectPlan{ipSchema=tSchema}) AppConfig{..} _ _ sCach
         OADisabled ->
           pure $ MaybeDbResult plan Nothing
 
--- Makes sure the querystring pk matches the payload pk
--- e.g. PUT /items?id=eq.1 { "id" : 1, .. } is accepted,
--- PUT /items?id=eq.14 { "id" : 2, .. } is rejected.
--- If this condition is not satisfied then nothing is inserted,
--- check the WHERE for INSERT in QueryBuilder.hs to see how it's done
-failPut :: ResultSet -> DbHandler ()
-failPut RSPlan{} = pure ()
-failPut RSStandard{rsQueryTotal=queryTotal} =
-  when (queryTotal /= 1) $ do
-    lift SQL.condemn
-    throwError $ Error.ApiRequestError Error.PutMatchingPkError
-
-resultSetWTotal :: AppConfig -> ApiRequest -> ResultSet -> SQL.Snippet -> DbHandler ResultSet
-resultSetWTotal _ _ rs@RSPlan{} _ = return rs
-resultSetWTotal AppConfig{..} ApiRequest{iPreferences=Preferences{..}} rs@RSStandard{rsTableTotal=tableTotal} countQuery =
-  case preferCount of
-    Just PlannedCount -> do
-      total <- explain
-      return rs{rsTableTotal=total}
-    Just EstimatedCount ->
-      if tableTotal > (fromIntegral <$> configDbMaxRows) then do
-        total <- max tableTotal <$> explain
-        return rs{rsTableTotal=total}
-      else
-        return rs
-    Just ExactCount ->
-      return rs
-    Nothing ->
-      return rs
-  where
-    explain =
-      lift . SQL.statement mempty . Statements.preparePlanRows countQuery $
-        configDbPreparedStatements
-
 -- |
 -- Fail a response if a single JSON object was requested and not exactly one
 -- was found.
@@ -240,10 +144,10 @@ failNotSingular mediaType RSStandard{rsQueryTotal=queryTotal} =
     lift SQL.condemn
     throwError $ Error.ApiRequestError . Error.SingularityError $ toInteger queryTotal
 
-failExceedsMaxAffectedPref :: (Maybe PreferMaxAffected, Maybe PreferHandling) -> ResultSet -> DbHandler ()
-failExceedsMaxAffectedPref (Nothing,_) _ = pure ()
+failExceedsMaxAffectedPref :: Maybe PreferMaxAffected -> ResultSet -> DbHandler ()
+failExceedsMaxAffectedPref Nothing _ = pure ()
 failExceedsMaxAffectedPref _ RSPlan{} = pure ()
-failExceedsMaxAffectedPref (Just (PreferMaxAffected n), handling) RSStandard{rsQueryTotal=queryTotal} = when ((queryTotal > n) && (handling == Just Strict)) $ do
+failExceedsMaxAffectedPref (Just (PreferMaxAffected n)) RSStandard{rsQueryTotal=queryTotal} = when (queryTotal > n) $ do
   lift SQL.condemn
   throwError $ Error.ApiRequestError . Error.MaxAffectedViolationError $ toInteger queryTotal
 

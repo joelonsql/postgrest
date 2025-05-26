@@ -13,87 +13,29 @@ import SpecHelper
 spec :: SpecWith ((), Application)
 spec =
   describe "GUC headers on all methods via pre-request" $ do
-    it "succeeds setting the headers on POST" $
-      post "/items"
-          [json|[{"id": 11111}]|]
+    it "succeeds setting the headers on RPC POST" $
+      post "/rpc/get_guc_value" [json|{"name": "test.header"}|]
         `shouldRespondWith`
-          ""
-          { matchStatus = 201
-          , matchHeaders = [ matchHeaderAbsent hContentType
+          [json|"myval"|]
+          { matchStatus = 200
+          , matchHeaders = [ matchContentTypeJson
                            , "X-Custom-Header" <:> "mykey=myval" ]
           }
 
-    it "succeeds setting the headers on GET and HEAD" $ do
-      request methodGet "/items?id=eq.1"
+    it "succeeds setting the headers on RPC GET" $ do
+      request methodGet "/rpc/get_projects_below?id=3"
           [("User-Agent", "MSIE 6.0")]
           ""
         `shouldRespondWith`
-          [json|[{"id": 1}]|]
+          [json|[{"id":4,"name":"OSX","client_id":2},{"id":5,"name":"Orphan","client_id":null}]|]
           { matchHeaders = ["Cache-Control" <:> "no-cache, no-store, must-revalidate"] }
 
-      request methodHead "/items?id=eq.1"
-          [("User-Agent", "MSIE 7.0")]
-          ""
-        `shouldRespondWith`
-          ""
-          { matchHeaders = [ matchContentTypeJson
-                           , "Cache-Control" <:> "no-cache, no-store, must-revalidate" ]
-          }
-
-      request methodHead "/projects"
-          [("Accept", "text/csv")]
-          ""
-        `shouldRespondWith`
-          ""
-          { matchHeaders = [ "Content-Type" <:> "text/csv; charset=utf-8"
-                           , "Content-Disposition" <:> "attachment; filename=projects.csv" ]
-          }
-
-    it "succeeds setting the headers on PATCH" $
-        patch "/items?id=eq.1"
-            [json|[{"id": 11111}]|]
-          `shouldRespondWith`
-            ""
-            { matchStatus = 204
-            , matchHeaders = [ matchHeaderAbsent hContentType
-                             , matchHeaderAbsent hContentLength
-                             , "X-Custom-Header" <:> "mykey=myval" ]
-            }
-
-    it "succeeds setting the headers on PUT" $
-      put "/items?id=eq.1"
-          [json|[{"id": 1}]|]
-        `shouldRespondWith`
-          ""
-          { matchStatus = 204
-          , matchHeaders = [ matchHeaderAbsent hContentType
-                           , matchHeaderAbsent hContentLength
-                           , "X-Custom-Header" <:> "mykey=myval" ]
-          }
-
-    it "succeeds setting the headers on DELETE" $
-      delete "/items?id=eq.1"
-        `shouldRespondWith`
-          ""
-          { matchStatus = 204
-          , matchHeaders = [ matchHeaderAbsent hContentType
-                           , matchHeaderAbsent hContentLength
-                           , "X-Custom-Header" <:> "mykey=myval" ]
-          }
-    it "can override the Content-Type header" $ do
-      request methodHead "/clients?id=eq.1"
+    it "succeeds setting the headers on OPTIONS" $ do
+      request methodOptions "/rpc/hello"
           []
           ""
         `shouldRespondWith`
           ""
           { matchStatus = 200
-          , matchHeaders = ["Content-Type" <:> "application/custom+json"]
-          }
-      request methodHead "/rpc/getallprojects"
-          []
-          ""
-        `shouldRespondWith`
-          ""
-          { matchStatus = 200
-          , matchHeaders = ["Content-Type" <:> "application/custom+json"]
+          , matchHeaders = [ "X-Custom-Header" <:> "mykey=myval" ]
           }

@@ -21,7 +21,6 @@ module PostgREST.Plan
   , DbActionPlan(..)
   , InspectPlan(..)
   , InfoPlan(..)
-  , CrudPlan(..)
   , CallReadPlan(..)
   ) where
 
@@ -32,16 +31,14 @@ import qualified Data.Set                      as S
 import qualified Data.Text                     as T
 import qualified PostgREST.SchemaCache.Routine as Routine
 
-import Data.Either.Combinators (mapLeft, mapRight)
+import Data.Either.Combinators (mapLeft)
 import Data.List               (delete, lookup)
-import Data.Maybe              (fromJust)
 import Data.Tree               (Tree (..))
 
 import PostgREST.ApiRequest                  (Action (..),
                                               ApiRequest (..),
                                               DbAction (..),
                                               InvokeMethod (..),
-                                              Mutation (..),
                                               Payload (..))
 import PostgREST.Config                      (AppConfig (..))
 import PostgREST.Error                       (ApiRequestError (..),
@@ -73,13 +70,11 @@ import PostgREST.SchemaCache.Routine         (MediaHandler (..),
                                               funcReturnsSetOfScalar)
 import PostgREST.SchemaCache.Table           (Column (..), Table (..),
                                               TablesMap,
-                                              tableColumnsList,
-                                              tablePKCols)
+                                              tableColumnsList)
 
 import PostgREST.ApiRequest.Preferences
 import PostgREST.ApiRequest.Types
 import PostgREST.Plan.CallPlan
-import PostgREST.Plan.MutatePlan
 import PostgREST.Plan.ReadPlan          as ReadPlan
 import PostgREST.Plan.Types
 
@@ -93,24 +88,6 @@ import Protolude hiding (from)
 -- Setup for doctests
 -- >>> import Data.Ranged.Ranges (fullRange)
 
-data CrudPlan
-  = WrappedReadPlan
-  { wrReadPlan :: ReadPlanTree
-  , pTxMode    :: SQL.Mode
-  , wrHandler  :: MediaHandler
-  , wrMedia    :: MediaType
-  , wrHdrsOnly :: Bool
-  , crudQi     :: QualifiedIdentifier
-  }
-  | MutateReadPlan {
-    mrReadPlan   :: ReadPlanTree
-  , mrMutatePlan :: MutatePlan
-  , pTxMode      :: SQL.Mode
-  , mrHandler    :: MediaHandler
-  , mrMedia      :: MediaType
-  , mrMutation   :: Mutation
-  , crudQi       :: QualifiedIdentifier
-  }
 
 data CallReadPlan = CallReadPlan {
     crReadPlan :: ReadPlanTree
@@ -130,44 +107,23 @@ data InspectPlan = InspectPlan {
   , ipSchema   :: Schema
   }
 
-data DbActionPlan = DbCrud CrudPlan | DbCall CallReadPlan | MaybeDb InspectPlan
-data InfoPlan     = RelInfoPlan QualifiedIdentifier | RoutineInfoPlan CallReadPlan | SchemaInfoPlan
+data DbActionPlan = DbCall CallReadPlan | MaybeDb InspectPlan
+data InfoPlan     = RoutineInfoPlan CallReadPlan | SchemaInfoPlan
 data ActionPlan   = Db DbActionPlan | NoDb InfoPlan
 
 actionPlan :: Action -> AppConfig -> ApiRequest -> SchemaCache -> Either Error ActionPlan
 actionPlan act conf apiReq sCache = case act of
     ActDb dbAct              -> Db <$> dbActionPlan dbAct conf apiReq sCache
-    ActRelationInfo ident    -> pure . NoDb $ RelInfoPlan ident
     ActRoutineInfo ident inv -> NoDb . RoutineInfoPlan <$> callReadPlan ident conf sCache apiReq inv
     ActSchemaInfo            -> pure $ NoDb SchemaInfoPlan
 
 dbActionPlan :: DbAction -> AppConfig -> ApiRequest -> SchemaCache -> Either Error DbActionPlan
 dbActionPlan dbAct conf apiReq sCache = case dbAct of
-  ActRelationRead identifier headersOnly ->
-    DbCrud <$> wrappedReadPlan identifier conf sCache apiReq headersOnly
-  ActRelationMut identifier mut ->
-    DbCrud <$> mutateReadPlan mut apiReq identifier conf sCache
   ActRoutine identifier invMethod ->
     DbCall <$> callReadPlan identifier conf sCache apiReq invMethod
   ActSchemaRead tSchema headersOnly ->
     MaybeDb <$> inspectPlan apiReq headersOnly tSchema
 
-wrappedReadPlan :: QualifiedIdentifier -> AppConfig -> SchemaCache -> ApiRequest -> Bool -> Either Error CrudPlan
-wrappedReadPlan  identifier conf sCache apiRequest@ApiRequest{iPreferences=Preferences{..},..} headersOnly = do
-  qi <- findTable identifier (dbTables sCache)
-  rPlan <- readPlan qi conf sCache apiRequest
-  (handler, mediaType)  <- mapLeft ApiRequestError $ negotiateContent conf apiRequest qi iAcceptMediaType (dbMediaHandlers sCache) (hasDefaultSelect rPlan)
-  if not (null invalidPrefs) && preferHandling == Just Strict then Left $ ApiRequestError $ InvalidPreferences invalidPrefs else Right ()
-  return $ WrappedReadPlan rPlan SQL.Read handler mediaType headersOnly qi
-
-mutateReadPlan :: Mutation -> ApiRequest -> QualifiedIdentifier -> AppConfig -> SchemaCache -> Either Error CrudPlan
-mutateReadPlan  mutation apiRequest@ApiRequest{iPreferences=Preferences{..},..} identifier conf sCache = do
-  qi <- findTable identifier (dbTables sCache)
-  rPlan <- readPlan qi conf sCache apiRequest
-  mPlan <- mutatePlan mutation qi apiRequest sCache rPlan
-  if not (null invalidPrefs) && preferHandling == Just Strict then Left $ ApiRequestError $ InvalidPreferences invalidPrefs else Right ()
-  (handler, mediaType)  <- mapLeft ApiRequestError $ negotiateContent conf apiRequest qi iAcceptMediaType (dbMediaHandlers sCache) (hasDefaultSelect rPlan)
-  return $ MutateReadPlan rPlan mPlan SQL.Write handler mediaType mutation qi
 
 callReadPlan :: QualifiedIdentifier -> AppConfig -> SchemaCache -> ApiRequest -> InvokeMethod -> Either Error CallReadPlan
 callReadPlan identifier conf sCache apiRequest@ApiRequest{iPreferences=Preferences{preferHandling, invalidPrefs},..} invMethod = do
@@ -447,7 +403,6 @@ expandStarsForTable ctx hasAgg rp@ReadPlan{select=selectFields, relSpread=spread
 
 -- | Enforces the `max-rows` config on the result
 treeRestrictRange :: Maybe Integer -> Action -> ReadPlanTree -> Either Error ReadPlanTree
-treeRestrictRange _ (ActDb (ActRelationMut _ _)) request = Right request
 treeRestrictRange maxRows _ request = pure $ nodeRestrictRange maxRows <$> request
   where
     nodeRestrictRange :: Maybe Integer -> ReadPlan -> ReadPlan
@@ -485,7 +440,6 @@ addRels schema action allRels parentNode (Node rPlan@ReadPlan{relName,relHint,re
         newReadPlan = case action of
           -- the CTE for mutations/rpc is used as WITH sourceCTEName .. SELECT .. FROM sourceCTEName as alias,
           -- we use the table name as an alias so findRel can find the right relationship.
-          ActDb (ActRelationMut _ _) -> rPlan{from=newFrom, fromAlias=newAlias}
           ActDb (ActRoutine _ _)     -> rPlan{from=newFrom, fromAlias=newAlias}
           _                  -> rPlan
       in
@@ -756,12 +710,6 @@ validateAggFunctions aggFunctionsAllowed (Node rp@ReadPlan {select} forest)
   | not aggFunctionsAllowed && any (isJust . csAggFunction) select = Left $ ApiRequestError AggregatesNotAllowed
   | otherwise = Node rp <$> traverse (validateAggFunctions aggFunctionsAllowed) forest
 
--- | Lookup table in the schema cache before creating read plan
-findTable :: QualifiedIdentifier -> TablesMap -> Either Error QualifiedIdentifier
-findTable qi@QualifiedIdentifier{..} tableMap =
-  case HM.lookup qi tableMap of
-    Nothing -> Left $ SchemaCacheErr $ TableNotFound qiSchema qiName (HM.elems tableMap)
-    Just _ -> Right qi
 
 addFilters :: ResolverContext -> ApiRequest -> ReadPlanTree -> Either Error ReadPlanTree
 addFilters ctx ApiRequest{..} rReq =
@@ -770,7 +718,6 @@ addFilters ctx ApiRequest{..} rReq =
     QueryParams.QueryParams{..} = iQueryParams
     flts =
       case iAction of
-        ActDb (ActRelationRead _  _) -> qsFilters
         ActDb (ActRoutine _ _)       -> qsFilters
         _                            -> qsFiltersNotRoot
 
@@ -897,10 +844,7 @@ addNullEmbedFilters (Node rp@ReadPlan{where_=curLogic} forest) = do
         Right flt
 
 addRanges :: ApiRequest -> ReadPlanTree -> Either Error ReadPlanTree
-addRanges ApiRequest{..} rReq =
-  case iAction of
-    ActDb (ActRelationMut _ _) -> Right rReq
-    _                          -> foldr addRangeToNode (Right rReq) =<< ranges
+addRanges ApiRequest{..} rReq = foldr addRangeToNode (Right rReq) =<< ranges
   where
     ranges :: Either Error [(EmbedPath, NonnegRange)]
     ranges = first (ApiRequestError . QueryParamError) $ QueryParams.pRequestRange `traverse` HM.toList iRange
@@ -938,46 +882,7 @@ updateNode f (targetNodeName:remainingPath, a) (Right (Node rootNode forest)) =
     findNode :: Maybe ReadPlanTree
     findNode = find (\(Node ReadPlan{relName, relAlias} _) -> relName == targetNodeName || relAlias == Just targetNodeName) forest
 
-mutatePlan :: Mutation -> QualifiedIdentifier -> ApiRequest -> SchemaCache -> ReadPlanTree -> Either Error MutatePlan
-mutatePlan mutation qi ApiRequest{iPreferences=Preferences{..}, ..} SchemaCache{dbTables} readReq =
-  case mutation of
-    MutationCreate ->
-      mapRight (\typedColumns -> Insert qi typedColumns body ((,) <$> preferResolution <*> Just confCols) [] returnings pkCols applyDefaults) typedColumnsOrError
-    MutationUpdate ->
-      mapRight (\typedColumns -> Update qi typedColumns body combinedLogic returnings applyDefaults) typedColumnsOrError
-    MutationSingleUpsert ->
-        if null qsLogic &&
-           qsFilterFields == S.fromList pkCols &&
-           not (null (S.fromList pkCols)) &&
-           all (\case
-              Filter _ (OpExpr False (OpQuant OpEqual Nothing _)) -> True
-              _                                                   -> False) qsFiltersRoot
-          then mapRight (\typedColumns -> Insert qi typedColumns body (Just (MergeDuplicates, pkCols)) combinedLogic returnings mempty False) typedColumnsOrError
-        else
-          Left $ ApiRequestError InvalidFilters
-    MutationDelete -> Right $ Delete qi combinedLogic returnings
-  where
-    ctx = ResolverContext dbTables qi "json"
-    confCols = fromMaybe pkCols qsOnConflict
-    QueryParams.QueryParams{..} = iQueryParams
-    returnings =
-      if preferRepresentation == Just None || isNothing preferRepresentation
-        then []
-        else S.toList $ inferColsEmbedNeeds readReq pkCols
-    -- TODO: remove fromJust by refactoring later
-    -- we can use fromJust, we have already looked up the table before building mutatePlan
-    tbl = fromJust $ HM.lookup qi dbTables
-    pkCols = maybe mempty tablePKCols (Just tbl)
-    logic = map (resolveLogicTree ctx . snd) qsLogic
-    combinedLogic = foldr (addFilterToLogicForest . resolveFilter ctx) logic qsFiltersRoot
-    body = payRaw <$> iPayload -- the body is assumed to be json at this stage(ApiRequest validates)
-    applyDefaults = preferMissing == Just ApplyDefaults
-    typedColumnsOrError = resolveOrError tbl `traverse` S.toList iColumns
 
-resolveOrError :: Table -> FieldName -> Either Error CoercibleField
-resolveOrError table field = case resolveTableFieldName table field Nothing of
-    CoercibleField{cfIRType=""} -> Left $ SchemaCacheErr $ ColumnNotFound (tableName table) field
-    cf                          -> Right cf
 
 callPlan :: Routine -> ApiRequest -> S.Set FieldName -> CallArgs -> ReadPlanTree -> CallPlan
 callPlan proc ApiRequest{} paramKeys args readReq = FunctionCall {
@@ -1065,13 +970,11 @@ addFilterToLogicForest flt lf = CoercibleStmnt flt : lf
 
 -- | Do content negotiation. i.e. choose a media type based on the intersection of accepted/produced media types.
 negotiateContent :: AppConfig -> ApiRequest -> QualifiedIdentifier -> [MediaType] -> MediaHandlerMap -> Bool -> Either ApiRequestError ResolvedHandler
-negotiateContent conf ApiRequest{iAction=act, iPreferences=Preferences{preferRepresentation=rep}} identifier accepts produces defaultSelect =
+negotiateContent conf ApiRequest{iAction=act} identifier accepts produces defaultSelect =
   case (act, firstAcceptedPick) of
     (_, Nothing)                                             -> Left . MediaTypeError $ map MediaType.toMime accepts
-    (ActDb (ActRelationMut _ _),              Just (x, mt)) -> Right (if rep == Just Full then x else NoAgg, mt)
     -- no need for an aggregate on HEAD https://github.com/PostgREST/postgrest/issues/2849
     -- TODO: despite no aggregate, these are responding with a Content-Type, which is not correct.
-    (ActDb (ActRelationRead _ True),             Just (_, mt)) -> Right (NoAgg, mt)
     (ActDb (ActRoutine  _ (InvRead True)), Just (_, mt))             -> Right (NoAgg, mt)
     (_, Just (x, mt))                                        -> Right (x, mt)
   where

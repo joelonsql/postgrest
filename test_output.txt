@@ -1,0 +1,762 @@
+
+Feature.CorsSpec
+  CORS
+    replies naively and permissively to preflight request [✔]
+    exposes necesssary response headers to regular request [✔]
+    allows INFO body through even with CORS request headers present to postflight request [✘]
+Feature.CustomMediaSpec
+  custom media types
+    Proc that returns scalar
+      can get raw output with Accept: text/html [✔]
+      can get raw output with Accept: text/plain [✔]
+      can get raw xml output with Accept: text/xml [✔]
+      should fail with function returning text and Accept: text/xml [✔]
+      should fail when the function doesn't return a row [✔]
+    Proc that returns scalar based on a table
+      can get an image with Accept: image/png [✔]
+    Proc that returns set of scalars and Accept: text/plain
+      will err because only scalars work with media type domains [✔]
+    matches requested media type correctly
+      will match image/png according to q values [✘]
+    any media type
+      on functions
+        returns application/json for */* if not explicitly set [✔]
+        accepts any media type and sets the generic octet-stream as content type [✔]
+        accepts some media types if there's conditional logic [✔]
+    media type parser allowed characters
+      regression test allowing charset=utf-8 [✔]
+      handle unrecognized parameters leniently [✔]
+Feature.NoSuperuserSpec
+  No Superuser
+    proves that the authenticator role is not a superuser [✔]
+Feature.OpenApi.OpenApiSpec
+  OpenAPI
+    root path returns a valid openapi spec [✔]
+    should respond to openapi request on rpc path with 404 [✔]
+    should respond to openapi request with unsupported media type with 406 [✔]
+    includes postgrest.org current version api docs [✔]
+    schema
+      includes title and comments to schema [✔]
+    table
+      includes paths to tables [✔]
+      includes an array type for GET responses [✔]
+      includes definitions to tables [✔]
+      includes definitions to views [✔]
+      doesn't include privileged table for anonymous [✔]
+      excludes privileged table for anonymous user [✔]
+      includes a fk description for a O2O relationship [✔]
+    Foreign table
+      includes foreign table properties [✔]
+    Partitioned table
+      includes partitioned table properties [✔]
+    Materialized view
+      includes materialized view properties [✔]
+    VIEW that has a source FK based on a UNIQUE key
+      includes fk description [✔]
+    VIEW created for a TABLE with a O2M relationship
+      fk points to destination TABLE instead of the VIEW [✔]
+    PostgreSQL to Swagger Type Mapping
+      character varying to string [✔]
+      character(1) to string [✔]
+      text to string [✔]
+      boolean to boolean [✔]
+      smallint to integer [✔]
+      integer to integer [✔]
+      bigint to integer [✔]
+      numeric to number [✔]
+      real to number [✔]
+      double_precision to number [✔]
+      json to any [✔]
+      jsonb to any [✔]
+      array types to array [✔]
+    Detects default values
+      text [✔]
+      boolean [✔]
+      integer [✔]
+      numeric [✔]
+      date [✔]
+      time [✔]
+      enum [✔]
+    RPC
+      includes function summary/description and query parameters for arguments in the get path item [✔]
+      includes function summary/description and body schema for arguments in the post path item [✔]
+      doesn't include privileged function for anonymous [✔]
+      excludes privileged function for anonymous user [✔]
+      doesn't include OUT params of function as required parameters [✔]
+      includes INOUT params(with no DEFAULT) of function as required parameters [✔]
+      uses a multi collection format when the function has a VARIADIC parameter [✔]
+    Security
+      does not include security or security definitions by default [✔]
+Feature.OptionsSpec
+  Allow header
+    a function
+      includes the POST method for a volatile function [✔]
+      includes the GET/HEAD/POST method for a stable function [✔]
+    root endpoint
+      includes the GET/HEAD method  [✔]
+Feature.Query.PgErrorCodeMappingSpec
+  PostgreSQL error code mappings
+    can map a RAISE error code and message to a http status [✔]
+    treats plpgsql assert as internal server error [✔]
+    includes the proxy-status header on the response
+      works with ApiRequest error [✔]
+      works with SchemaCache error [✔]
+Feature.Query.PlanSpec.disabledSpec
+  doesn't work if db-plan-enabled=false(the default) [✔]
+Feature.Query.PreferencesSpec
+  test prefer headers and preference-applied headers
+    check behaviour of Prefer: handling=strict
+      throws error with rpc [✔]
+    check behaviour of Prefer: handling=lenient
+      does not throw error with rpc [✔]
+    test Prefer: max-affected with handling=strict
+      should fail with rpc when deleting rows more than prefered [✔]
+      should succeed with rpc deleting rows less than prefered [✔]
+Feature.Query.RawOutputTypesSpec
+  When raw-media-types config variable is missing or left empty
+    responds json to a GET request to RPC with Firefox Accept headers [✔]
+    responds json to a GET request to RPC with Chrome Accept headers [✔]
+Feature.Query.RpcSpec
+  remote procedure call
+    a proc that returns a set
+      returns paginated results
+        using the Range header [✔]
+        using limit and offset [✔]
+      includes total count if requested
+        using the Range header [✘]
+        using limit and offset [✘]
+      includes exact count if requested [✘]
+      includes exact count of 1 for functions that return a single scalar, domain or composite [✘]
+      returns proper json [✔]
+      returns CSV [✔]
+      ignores Range header when method is different than GET
+        without limit and offset [✘]
+        with limit and offset [✘]
+        does not throw an invalid range error [✘]
+    unknown function
+      returns 404 [✔]
+      should fail with 404 on unknown proc name [✔]
+      should fail with 404 and hint the closest proc on unknown proc name [✔]
+      should fail with 404 on unknown proc args [✔]
+      should fail with 404 and hint the closest args on unknown proc args [✔]
+      should not ignore unknown args and fail with 404 [✔]
+      should fail with 404 for overloaded functions with unknown args [✔]
+    ambiguous overloaded functions with same parameters' names but different types
+      should fail with 300 Multiple Choices without explicit type casts [✔]
+    works when having uppercase identifiers [✔]
+    shaping the response returned by a proc
+      returns a project [✔]
+      can filter proc results [✔]
+      can limit proc results [✔]
+      select works on the first level [✔]
+    foreign entities embedding
+      can embed if related tables are in the exposed schema [✔]
+      cannot embed if the related table is not in the exposed schema [✔]
+      can embed if the related tables are in a hidden schema but exposed as views [✔]
+      can embed an M2M relationship table [✔]
+      can embed an M2M relationship table that has a parent relationship table [✔]
+      can embed an O2O relationship [✔]
+      can embed if rpc returns domain of table type [✔]
+    a proc that returns an empty rowset
+      returns empty json array [✔]
+    proc return types
+      returns text
+        returns proper json [✔]
+        can handle unicode [✔]
+      returns array [✔]
+      returns setof integers [✔]
+      returns enum value [✔]
+      returns domain value [✔]
+      returns range [✔]
+      returns row of scalars [✔]
+      returns composite type in exposed schema [✔]
+      cannot return composite type in hidden schema [✔]
+      returns domain of composite type [✔]
+      returns single row from table [✔]
+      returns 204, no Content-Type header and no content for void [✔]
+      returns null for an integer with null value [✔]
+      returns a record type [✔]
+      returns a setof record type [✔]
+      different types when overloaded
+        returns composite type [✔]
+    proc argument types
+      accepts a variety of arguments (Postgres >= 10) [✔]
+      accepts a variety of arguments with GET [✔]
+      accepts a variety of arguments from an html form [✔]
+      parses embedded JSON arguments as JSON [✔]
+      parses quoted JSON arguments as JSON string (from Postgres 10.9, 11.4) [✔]
+    improper input
+      rejects unknown content type even if payload is good [✔]
+      rejects malformed json payload [✔]
+      treats simple plpgsql raise as invalid input [✔]
+      treats plpgsql assert as internal server error [✔]
+    unsupported method
+      DELETE fails [✔]
+      PATCH fails [✔]
+    executes the proc exactly once per request [✔]
+    a proc that receives no parameters
+      interprets empty string as empty json object on a post request [✔]
+      interprets empty string as a function with no args on a get request [✔]
+    returns proper output when having the same return col name as the proc name [✔]
+    procs with OUT/INOUT params
+      returns an object result when there is a single OUT param [✔]
+      returns an object result when there is a single INOUT param [✔]
+      returns an object result when there are many OUT params [✔]
+      returns an object result when there are many INOUT params [✔]
+    procs with TABLE return
+      returns an object result when there is a single-column TABLE return type [✔]
+      returns an object result when there is a multi-column TABLE return type [✔]
+    procs with VARIADIC params
+      works with POST (Postgres >= 10) [✔]
+      works with GET and repeated params
+        n=0 (through DEFAULT) [✔]
+        n=1 [✔]
+        n>1 [✔]
+      works with POST and repeated params from html form
+        n=0 (through DEFAULT) [✔]
+        n=1 [✔]
+        n>1 [✔]
+    returns last value for repeated params without VARIADIC [✔]
+    returns last value for repeated non-variadic params in function with other VARIADIC arguments [✔]
+    can handle procs with args that have a DEFAULT value [✔]
+    can map a RAISE error code and message to a http status [✔]
+    defaults to status 500 if RAISE code is PT not followed by a number [✔]
+    should work with an overloaded function
+      overloaded() [✔]
+      overloaded(int, int) [✔]
+      overloaded(text, text, text) [✔]
+      overloaded_html_form() [✔]
+      overloaded_html_form(int, int) [✔]
+      overloaded_html_form(text, text, text) [✔]
+      embedding overloaded functions with the same signature except for the last param with a default value
+        overloaded_default(text default) [✔]
+        overloaded_default(int) [✔]
+        overloaded_default(int, text default) [✔]
+        overloaded_default(int, int) [✔]
+    only for POST rpc
+      gives a parse filter error if GET style proc args are specified [✔]
+      ignores json keys not included in ?columns [✔]
+      only takes the first object in case of array of objects payload [✔]
+    HTTP request env vars
+      custom header is set [✔]
+      standard header is set [✔]
+      single cookie ends up as claims [✔]
+      multiple cookies end up as claims [✔]
+      app settings available [✔]
+      gets the http method [✔]
+      gets the http path [✔]
+    only for GET rpc
+      should fail on mutating procs [✔]
+      should filter a proc that has arg name = filter name [✔]
+      should work with filters that have the not operator [✔]
+      should work with filters that use the fts operator on tsvector columns [✔]
+      should work with filters that use the fts operator on text and json columns [✔]
+      should work with the phraseto_tsquery function [✔]
+    should work with an argument of custom type in public schema [✔]
+    GUC headers on function calls
+      succeeds setting the headers [✔]
+      fails when setting headers with wrong json structure [✔]
+      can set the same http header twice [✔]
+      GUC status override
+        can override the status on RPC [✔]
+        fails when setting invalid status guc [✔]
+      single unnamed param
+        can insert json directly [✔]
+        can insert text directly [✔]
+        can insert xml directly [✔]
+        can insert bytea directly [✔]
+        will err when no function with single unnamed json parameter exists and application/json is specified [✔]
+        will err when no function with single unnamed text parameter exists and text/plain is specified [✔]
+        will err when no function with single unnamed text parameter exists and text/xml is specified [✔]
+        will err when no function with single unnamed bytea parameter exists and application/octet-stream is specified [✔]
+        should be able to resolve when a single unnamed json parameter exists and other overloaded functions are found [✔]
+        should be able to fallback to the single unnamed parameter function when other overloaded functions are not found [✔]
+        should call the function with no parameters and not fallback to the single unnamed parameter function when using GET with Content-Type headers [✔]
+        should fail to fallback to any single unnamed parameter function when using an unsupported Content-Type header [✔]
+        should fail with multiple choices when two fallback functions with single unnamed json and jsonb parameters exist [✔]
+        should fail on /rpc/unnamed_xml_param when posting invalid xml [✔]
+    a proc with bit and char parameters
+      modifies the param type from character to character varying [✔]
+      modifies the param type from bit to bit varying [✔]
+    get message and details from raise sqlstate
+      gets message and details from raise sqlstate PGRST [✔]
+      get message and details from PGRST raise and checks standard status message [✔]
+      get message and details from PGRST raise and checks custom status message [✔]
+      returns error for invalid JSON in the MESSAGE option of the RAISE statement [✔]
+      returns error for invalid JSON in the DETAIL option of the RAISE statement [✔]
+      returns error for missing DETAIL option in the RAISE statement [✔]
+    test table valued function with filter
+      works with filter on unselected columns [✔]
+      works with filter on unselected columns with null embed [✔]
+      works with logical filter on unselected columns [✔]
+    schema cache duplicate definitions when two entries in pg_description have the same OID
+      doesn't err with 300 Multiple Choices [✔]
+Feature.Query.RangeSpec
+  GET /rpc/getitemrange
+    without range headers
+      with response under server size limit
+        returns whole range with status 200 [✔]
+      when I don't want the count
+        returns range Content-Range with */* for empty range [✔]
+        returns range Content-Range with range/* [✔]
+      of invalid range
+        refuses a range with nonzero start when there are no items [✘]
+        refuses a range requesting start past last item [✘]
+        refuses a range requested with nonzero start when there are no items [✘]
+        refuses a range requesting start past last item [✘]
+      when I want the count
+        returns range Content-Range with range/total [✘]
+        when the header Prefer: count=exact is sent
+          returns the exact count [✘]
+        when the header Prefer: count=estimated is sent
+          returns the exact count also and shouldn't do estimates on fields other than pk and fks [✘]
+    with limit/offset parameters
+      no parameters return everything [✔]
+      top level limit with parameter limit [✔]
+      top level limit with parameter offset [✔]
+    with range headers
+      of acceptable range
+        succeeds with partial content [✘]
+        returns partial content with range/* [✘]
+        returns partial content with range/total [✘]
+      of invalid range
+        refuses a range with first position past last position [✘]
+  PATCH /rpc/setitemrange
+    with Prefer: tx=commit
+      returns a singular json object [✘]
+Feature.DisabledOpenApiSpec
+  Disabled OpenApi
+    responds with 404 [✔]
+Feature.OpenApi.IgnorePrivOpenApiSpec
+  OpenAPI Ignore Privileges
+    root path returns a valid openapi spec [✔]
+    table
+      includes privileged table even if user does not have permission [✔]
+      only includes tables that belong to another schema if the Accept-Profile header is used [✔]
+      includes comments on tables [✔]
+    RPC
+      includes privileged function even if user does not have permission [✔]
+      only includes functions that belong to another schema if the Accept-Profile header is used [✔]
+Feature.OpenApi.ProxySpec
+  GET / with proxy
+    returns a valid openapi spec with proxy [✔]
+Feature.OpenApi.SecurityOpenApiSpec
+  Security active
+    includes security and security definitions [✔]
+Feature.ExtraSearchPathSpec
+  extra search path
+    finds the isn is_valid function on the extensions schema [✔]
+    finds a function on a schema with uppercase and special characters in its name [✔]
+Feature.OpenApi.RootSpec
+  root spec function
+    accepts application/openapi+json [✔]
+    accepts application/json [✔]
+Feature.RpcPreRequestGucsSpec
+  GUC headers on all methods via pre-request
+    returns null when GUC is not set [✘]
+    returns correct data on RPC GET [✔]
+    returns OPTIONS for existing function [✘]
+Feature.Query.MultipleSchemaSpec
+  multiple schemas in single instance
+    calling procs on different schemas
+      succeeds in calling the default schema proc [✔]
+      succeeds in calling the v1 schema proc and embedding [✔]
+      succeeds in calling the v2 schema proc and embedding [✔]
+      succeeds in calling the v2 schema proc with POST by using Content-Profile [✔]
+      succeeds in calling handler with a domain on another schema [✔]
+      succeeds in calling handler with a domain on an exposed schema [✔]
+Feature.Query.PlanSpec.spec
+  function plan
+    outputs the total cost for a function call [✔]
+  function call costs
+    should not exceed cost when calling setof composite proc [✔]
+    should not exceed cost when calling setof composite proc with empty params [✔]
+    should not exceed cost when calling scalar proc [✔]
+    function inlining
+      should inline a zero argument function(the function won't appear in the plan tree) [✔]
+      should inline a function with arguments(the function won't appear in the plan tree) [✔]
+  custom media types
+    outputs the plan for a scalar function text/xml [✔]
+Feature.ObservabilitySpec.spec
+  Observability
+    includes the server trace header on the response [✔]
+Feature.Query.ServerTimingSpec.spec
+  Show Duration on Server-Timing header
+    responds with Server-Timing header
+      works with a successful request [✔]
+      works with OPTIONS method [✔]
+Feature.RollbackAllowedSpec
+  tx-allow-override = true
+    without Prefer tx
+      responds to GET on RPC [✔]
+      responds to POST on RPC [✔]
+      raises immediate constraints [✔]
+      raises deferred constraints [✔]
+    Prefer tx=commit
+      responds to GET on RPC [✔]
+      responds to POST on RPC [✔]
+      raises immediate constraints [✔]
+      raises deferred constraints [✔]
+    Prefer tx=rollback
+      responds to GET on RPC [✔]
+      responds to POST on RPC [✔]
+      raises immediate constraints [✔]
+      raises deferred constraints [✔]
+Feature.RollbackDisallowedSpec
+  tx-rollback-all = false, tx-allow-override = false
+    without Prefer tx
+      responds to GET on RPC [✔]
+      responds to POST on RPC [✔]
+      raises immediate constraints [✔]
+      raises deferred constraints [✔]
+    Prefer tx=commit
+      responds to GET on RPC [✔]
+      responds to POST on RPC [✔]
+      raises immediate constraints [✔]
+      raises deferred constraints [✔]
+    Prefer tx=rollback
+      responds to GET on RPC [✔]
+      responds to POST on RPC [✔]
+      raises immediate constraints [✔]
+      raises deferred constraints [✔]
+Feature.RollbackForcedSpec
+  tx-rollback-all = true, tx-allow-override = false
+    without Prefer tx
+      responds to GET on RPC [✔]
+      responds to POST on RPC [✔]
+      raises immediate constraints [✔]
+      raises deferred constraints [✔]
+    Prefer tx=commit
+      responds to GET on RPC [✔]
+      responds to POST on RPC [✔]
+      raises immediate constraints [✔]
+      raises deferred constraints [✔]
+    Prefer tx=rollback
+      responds to GET on RPC [✔]
+      responds to POST on RPC [✔]
+      raises immediate constraints [✔]
+      raises deferred constraints [✔]
+
+Failures:
+
+  test/spec/Feature/CorsSpec.hs:55:9: 
+  1) Feature.CorsSpec.CORS allows INFO body through even with CORS request headers present to postflight request
+       status mismatch:
+         expected: 200
+         but got:  404
+       missing header:
+         Access-Control-Allow-Origin: *
+       the actual headers were:
+         Content-Type: application/json; charset=utf-8
+         Content-Length: 243
+         Proxy-Status: PostgREST; error=PGRST202
+       body mismatch:
+         expected: ""
+         but got:  "{\"code\":\"PGRST202\",\"details\":\"Searched for the function test.sayhello without parameters, but no matches were found in the schema cache.\",\"hint\":null,\"message\":\"Could not find the function test.sayhello without parameters in the schema cache\"}"
+
+  To rerun use: --match "/Feature.CorsSpec/CORS/allows INFO body through even with CORS request headers present to postflight request/" --seed 1128209489
+
+  test/spec/Feature/Query/CustomMediaSpec.hs:98:9: 
+  2) Feature.CustomMediaSpec, custom media types, matches requested media type correctly, will match image/png according to q values
+       missing header:
+         Content-Type: image/png
+       the actual headers were:
+         Content-Range: 0-0/*
+         Content-Length: 281
+         Content-Type: application/json; charset=utf-8
+         Server-Timing: parse;dur=0.0, plan;dur=0.5, transaction;dur=0.2, response;dur=0.0
+       body mismatch:
+         expected: ""
+         but got:  "\"\\\\x89504e470d0a1a0a0000000d494844520000001e0000001e010300000001fe3ce100000006504c5445000000ff00001bff8d220000003f4944415408d76360c006d81b6004ff0118c10322641e00090910619100220a8084018828b080110f2480c4ff3f5082114c1ce08312cc0dec50821d08710200649012478e4d4c820000000049454e44ae426082\""
+
+  To rerun use: --match "/Feature.CustomMediaSpec/custom media types/matches requested media type correctly/will match image/png according to q values/" --seed 1128209489
+
+  test/spec/Feature/Query/RpcSpec.hs:56:14: 
+  3) Feature.Query.RpcSpec, remote procedure call, a proc that returns a set, includes total count if requested, using the Range header
+       status mismatch:
+         expected: 206
+         but got:  200
+       missing header:
+         Content-Range: 1-1/2
+       the actual headers were:
+         Content-Range: 1-1/*
+         Preference-Applied: count=exact
+         Content-Length: 10
+         Content-Type: application/json; charset=utf-8
+         Server-Timing: parse;dur=0.2, plan;dur=0.0, transaction;dur=0.2, response;dur=0.0
+
+  To rerun use: --match "/Feature.Query.RpcSpec/remote procedure call/a proc that returns a set/includes total count if requested/using the Range header/" --seed 1128209489
+
+  test/spec/Feature/Query/RpcSpec.hs:65:14: 
+  4) Feature.Query.RpcSpec, remote procedure call, a proc that returns a set, includes total count if requested, using limit and offset
+       status mismatch:
+         expected: 206
+         but got:  200
+       missing header:
+         Content-Range: 1-1/2
+       the actual headers were:
+         Content-Range: 1-1/*
+         Preference-Applied: count=exact
+         Content-Length: 10
+         Content-Type: application/json; charset=utf-8
+         Server-Timing: parse;dur=0.0, plan;dur=0.0, transaction;dur=0.2, response;dur=0.0
+
+  To rerun use: --match "/Feature.Query.RpcSpec/remote procedure call/a proc that returns a set/includes total count if requested/using limit and offset/" --seed 1128209489
+
+  test/spec/Feature/Query/RpcSpec.hs:87:12: 
+  5) Feature.Query.RpcSpec, remote procedure call, a proc that returns a set, includes exact count if requested
+       missing header:
+         Content-Range: 0-4/5
+       the actual headers were:
+         Content-Range: 0-4/*
+         Preference-Applied: count=exact
+         Content-Type: application/json; charset=utf-8
+         Server-Timing: parse;dur=0.0, plan;dur=0.0, transaction;dur=0.2, response;dur=0.0
+
+  To rerun use: --match "/Feature.Query.RpcSpec/remote procedure call/a proc that returns a set/includes exact count if requested/" --seed 1128209489
+
+  test/spec/Feature/Query/RpcSpec.hs:101:12: 
+  6) Feature.Query.RpcSpec, remote procedure call, a proc that returns a set, includes exact count of 1 for functions that return a single scalar, domain or composite
+       missing header:
+         Content-Range: 0-0/1
+       the actual headers were:
+         Content-Range: 0-0/*
+         Preference-Applied: count=exact
+         Content-Length: 1
+         Content-Type: application/json; charset=utf-8
+         Server-Timing: parse;dur=0.0, plan;dur=0.0, transaction;dur=0.3, response;dur=0.0
+
+  To rerun use: --match "/Feature.Query.RpcSpec/remote procedure call/a proc that returns a set/includes exact count of 1 for functions that return a single scalar, domain or composite/" --seed 1128209489
+
+  test/spec/Feature/Query/RpcSpec.hs:154:14: 
+  7) Feature.Query.RpcSpec, remote procedure call, a proc that returns a set, ignores Range header when method is different than GET, without limit and offset
+       missing header:
+         Content-Range: 0-1/2
+       the actual headers were:
+         Content-Range: 0-1/*
+         Preference-Applied: count=exact
+         Content-Length: 22
+         Content-Type: application/json; charset=utf-8
+         Server-Timing: parse;dur=0.1, plan;dur=0.0, transaction;dur=0.2, response;dur=0.0
+
+  To rerun use: --match "/Feature.Query.RpcSpec/remote procedure call/a proc that returns a set/ignores Range header when method is different than GET/without limit and offset/" --seed 1128209489
+
+  test/spec/Feature/Query/RpcSpec.hs:171:14: 
+  8) Feature.Query.RpcSpec, remote procedure call, a proc that returns a set, ignores Range header when method is different than GET, with limit and offset
+       status mismatch:
+         expected: 206
+         but got:  200
+       missing header:
+         Content-Range: 1-2/3
+       the actual headers were:
+         Content-Range: 1-2/*
+         Preference-Applied: count=exact
+         Content-Length: 22
+         Content-Type: application/json; charset=utf-8
+         Server-Timing: parse;dur=0.0, plan;dur=0.0, transaction;dur=0.2, response;dur=0.0
+
+  To rerun use: --match "/Feature.Query.RpcSpec/remote procedure call/a proc that returns a set/ignores Range header when method is different than GET/with limit and offset/" --seed 1128209489
+
+  test/spec/Feature/Query/RpcSpec.hs:188:14: 
+  9) Feature.Query.RpcSpec, remote procedure call, a proc that returns a set, ignores Range header when method is different than GET, does not throw an invalid range error
+       status mismatch:
+         expected: 206
+         but got:  200
+       missing header:
+         Content-Range: 1-2/3
+       the actual headers were:
+         Content-Range: 1-2/*
+         Preference-Applied: count=exact
+         Content-Length: 22
+         Content-Type: application/json; charset=utf-8
+         Server-Timing: parse;dur=0.0, plan;dur=0.0, transaction;dur=0.2, response;dur=0.0
+
+  To rerun use: --match "/Feature.Query.RpcSpec/remote procedure call/a proc that returns a set/ignores Range header when method is different than GET/does not throw an invalid range error/" --seed 1128209489
+
+  test/spec/Feature/Query/RangeSpec.hs:40:13: 
+  10) Feature.Query.RangeSpec, GET /rpc/getitemrange, without range headers, of invalid range, refuses a range with nonzero start when there are no items
+       status mismatch:
+         expected: 416
+         but got:  200
+       missing header:
+         Content-Range: */0
+       missing header:
+         Content-Length: 144
+       the actual headers were:
+         Content-Range: */*
+         Preference-Applied: count=exact
+         Content-Length: 2
+         Content-Type: application/json; charset=utf-8
+         Server-Timing: parse;dur=0.1, plan;dur=0.0, transaction;dur=0.2, response;dur=0.0
+       body mismatch:
+         expected: {"code":"PGRST103","details":"An offset of 1 was requested, but there are only 0 rows.","hint":null,"message":"Requested range not satisfiable"}
+         but got:  []
+
+  To rerun use: --match "/Feature.Query.RangeSpec/GET /rpc/getitemrange/without range headers/of invalid range/refuses a range with nonzero start when there are no items/" --seed 1128209489
+
+  test/spec/Feature/Query/RangeSpec.hs:55:13: 
+  11) Feature.Query.RangeSpec, GET /rpc/getitemrange, without range headers, of invalid range, refuses a range requesting start past last item
+       status mismatch:
+         expected: 416
+         but got:  200
+
+  To rerun use: --match "/Feature.Query.RangeSpec/GET /rpc/getitemrange/without range headers/of invalid range/refuses a range requesting start past last item/" --seed 1128209489
+
+  test/spec/Feature/Query/RangeSpec.hs:60:13: 
+  12) Feature.Query.RangeSpec, GET /rpc/getitemrange, without range headers, of invalid range, refuses a range requested with nonzero start when there are no items
+       status mismatch:
+         expected: 416
+         but got:  200
+       missing header:
+         Content-Range: */0
+       the actual headers were:
+         Content-Range: */*
+         Preference-Applied: count=exact
+         Content-Type: application/json; charset=utf-8
+         Server-Timing: parse;dur=0.1, plan;dur=0.0, transaction;dur=0.1, response;dur=0.0
+
+  To rerun use: --match "/Feature.Query.RangeSpec/GET /rpc/getitemrange/without range headers/of invalid range/refuses a range requested with nonzero start when there are no items/" --seed 1128209489
+
+  test/spec/Feature/Query/RangeSpec.hs:69:13: 
+  13) Feature.Query.RangeSpec, GET /rpc/getitemrange, without range headers, of invalid range, refuses a range requesting start past last item
+       status mismatch:
+         expected: 416
+         but got:  200
+
+  To rerun use: --match "/Feature.Query.RangeSpec/GET /rpc/getitemrange/without range headers/of invalid range/refuses a range requesting start past last item/" --seed 1128209489
+
+  test/spec/Feature/Query/RangeSpec.hs:76:13: 
+  14) Feature.Query.RangeSpec, GET /rpc/getitemrange, without range headers, when I want the count, returns range Content-Range with range/total
+       missing header:
+         Content-Range: 0-14/15
+       the actual headers were:
+         Content-Range: 0-14/*
+         Preference-Applied: count=exact
+         Content-Length: 184
+         Content-Type: application/json; charset=utf-8
+         Server-Timing: parse;dur=0.1, plan;dur=0.0, transaction;dur=0.2, response;dur=0.0
+
+  To rerun use: --match "/Feature.Query.RangeSpec/GET /rpc/getitemrange/without range headers/when I want the count/returns range Content-Range with range/total/" --seed 1128209489
+
+  test/spec/Feature/Query/RangeSpec.hs:83:15: 
+  15) Feature.Query.RangeSpec, GET /rpc/getitemrange, without range headers, when I want the count, when the header Prefer: count=exact is sent, returns the exact count
+       missing header:
+         Content-Range: 0-7/50
+       the actual headers were:
+         Content-Range: 0-7/*
+         Preference-Applied: count=exact
+         Content-Length: 94
+         Content-Type: application/json; charset=utf-8
+         Server-Timing: parse;dur=0.2, plan;dur=0.0, transaction;dur=0.1, response;dur=0.0
+
+  To rerun use: --match "/Feature.Query.RangeSpec/GET /rpc/getitemrange/without range headers/when I want the count/when the header Prefer: count=exact is sent/returns the exact count/" --seed 1128209489
+
+  test/spec/Feature/Query/RangeSpec.hs:90:15: 
+  16) Feature.Query.RangeSpec, GET /rpc/getitemrange, without range headers, when I want the count, when the header Prefer: count=estimated is sent, returns the exact count also and shouldn't do estimates on fields other than pk and fks
+       missing header:
+         Content-Range: 0-7/50
+       the actual headers were:
+         Content-Range: 0-7/*
+         Preference-Applied: count=estimated
+         Content-Length: 94
+         Content-Type: application/json; charset=utf-8
+         Server-Timing: parse;dur=0.0, plan;dur=0.0, transaction;dur=0.2, response;dur=0.0
+
+  To rerun use: --match "/Feature.Query.RangeSpec/GET /rpc/getitemrange/without range headers/when I want the count/when the header Prefer: count=estimated is sent/returns the exact count also and shouldn't do estimates on fields other than pk and fks/" --seed 1128209489
+
+  test/spec/Feature/Query/RangeSpec.hs:116:28: 
+  17) Feature.Query.RangeSpec, GET /rpc/getitemrange, with range headers, of acceptable range, succeeds with partial content
+       expected: Status {
+                   statusCode = 206,
+                   statusMessage = "Partial Content"
+                 }
+        but got: Status {
+                   statusCode = 200,
+                   statusMessage = "OK"
+                 }
+
+  To rerun use: --match "/Feature.Query.RangeSpec/GET /rpc/getitemrange/with range headers/of acceptable range/succeeds with partial content/" --seed 1128209489
+
+  test/spec/Feature/Query/RangeSpec.hs:121:13: 
+  18) Feature.Query.RangeSpec, GET /rpc/getitemrange, with range headers, of acceptable range, returns partial content with range/*
+       status mismatch:
+         expected: 206
+         but got:  200
+
+  To rerun use: --match "/Feature.Query.RangeSpec/GET /rpc/getitemrange/with range headers/of acceptable range/returns partial content with range/*/" --seed 1128209489
+
+  test/spec/Feature/Query/RangeSpec.hs:129:13: 
+  19) Feature.Query.RangeSpec, GET /rpc/getitemrange, with range headers, of acceptable range, returns partial content with range/total
+       status mismatch:
+         expected: 206
+         but got:  200
+       missing header:
+         Content-Range: 0-1/15
+       the actual headers were:
+         Content-Range: 0-1/*
+         Preference-Applied: count=exact
+         Content-Length: 22
+         Content-Type: application/json; charset=utf-8
+         Server-Timing: parse;dur=0.1, plan;dur=0.0, transaction;dur=0.1, response;dur=0.0
+
+  To rerun use: --match "/Feature.Query.RangeSpec/GET /rpc/getitemrange/with range headers/of acceptable range/returns partial content with range/total/" --seed 1128209489
+
+  test/spec/Feature/Query/RangeSpec.hs:138:13: 
+  20) Feature.Query.RangeSpec, GET /rpc/getitemrange, with range headers, of invalid range, refuses a range with first position past last position
+       missing header:
+         Content-Range: */15
+       the actual headers were:
+         Content-Type: application/json; charset=utf-8
+         Content-Length: 177
+         Proxy-Status: PostgREST; error=PGRST103
+       body mismatch:
+         expected: {"code":"PGRST103","details":null,"hint":null,"message":"Requested range not satisfiable"}
+         but got:  {"code":"PGRST103","details":"The lower boundary must be lower than or equal to the upper boundary in the Range header.","hint":null,"message":"Requested range not satisfiable"}
+
+  To rerun use: --match "/Feature.Query.RangeSpec/GET /rpc/getitemrange/with range headers/of invalid range/refuses a range with first position past last position/" --seed 1128209489
+
+  test/spec/Feature/Query/RangeSpec.hs:155:11: 
+  21) Feature.Query.RangeSpec, PATCH /rpc/setitemrange, with Prefer: tx=commit, returns a singular json object
+       status mismatch:
+         expected: 200
+         but got:  405
+       missing header:
+         Content-Range: 0-0/1
+       missing header:
+         Preference-Applied: tx=commit, count=exact
+       the actual headers were:
+         Content-Type: application/json; charset=utf-8
+         Content-Length: 93
+         Proxy-Status: PostgREST; error=PGRST101
+       body mismatch:
+         expected: {"nextval":1}
+         but got:  {"code":"PGRST101","details":null,"hint":null,"message":"Cannot use the PATCH method on RPC"}
+
+  To rerun use: --match "/Feature.Query.RangeSpec/PATCH /rpc/setitemrange/with Prefer: tx=commit/returns a singular json object/" --seed 1128209489
+
+  test/spec/Feature/RpcPreRequestGucsSpec.hs:18:9: 
+  22) Feature.RpcPreRequestGucsSpec, GUC headers on all methods via pre-request, returns null when GUC is not set
+       status mismatch:
+         expected: 200
+         but got:  400
+       body mismatch:
+         expected: null
+         but got:  {"code":"42704","details":null,"hint":null,"message":"unrecognized configuration parameter \"test.header\""}
+
+  To rerun use: --match "/Feature.RpcPreRequestGucsSpec/GUC headers on all methods via pre-request/returns null when GUC is not set/" --seed 1128209489
+
+  test/spec/Feature/RpcPreRequestGucsSpec.hs:35:9: 
+  23) Feature.RpcPreRequestGucsSpec, GUC headers on all methods via pre-request, returns OPTIONS for existing function
+       status mismatch:
+         expected: 200
+         but got:  404
+       body mismatch:
+         expected: ""
+         but got:  "{\"code\":\"PGRST202\",\"details\":\"Searched for the function test.sayhello without parameters, but no matches were found in the schema cache.\",\"hint\":null,\"message\":\"Could not find the function test.sayhello without parameters in the schema cache\"}"
+
+  To rerun use: --match "/Feature.RpcPreRequestGucsSpec/GUC headers on all methods via pre-request/returns OPTIONS for existing function/" --seed 1128209489
+
+Randomized with seed 1128209489
+
+Finished in 8.5763 seconds
+302 examples, 23 failures

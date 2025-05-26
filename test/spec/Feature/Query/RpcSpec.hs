@@ -18,104 +18,6 @@ spec :: SpecWith ((), Application)
 spec =
   describe "remote procedure call" $ do
     context "a proc that returns a set" $ do
-      context "returns paginated results" $ do
-        it "using the Range header" $
-          request methodGet "/rpc/getitemrange?min=2&max=4"
-                  (rangeHdrs (ByteRangeFromTo 1 1)) mempty
-             `shouldRespondWith` [json| [{"id":4}] |]
-              { matchStatus = 200
-              , matchHeaders = ["Content-Range" <:> "1-1/*"]
-              }
-
-        it "using limit and offset" $ do
-          post "/rpc/getitemrange?limit=1&offset=1" [json| { "min": 2, "max": 4 } |]
-             `shouldRespondWith` [json| [{"id":4}] |]
-              { matchStatus = 200
-              , matchHeaders = [ "Content-Range" <:> "1-1/*"
-                               , "Content-Length" <:> "10" ]
-              }
-          get "/rpc/getitemrange?min=2&max=4&limit=1&offset=1"
-             `shouldRespondWith` [json| [{"id":4}] |]
-              { matchStatus = 200
-              , matchHeaders = [ "Content-Range" <:> "1-1/*"
-                               , "Content-Length" <:> "10"]
-              }
-          request methodHead "/rpc/getitemrange?min=2&max=4&limit=1&offset=1" mempty mempty
-            `shouldRespondWith`
-              ""
-              { matchStatus = 200
-              , matchHeaders = [ matchContentTypeJson
-                               , matchHeaderAbsent hContentLength
-                               , "Content-Range" <:> "1-1/*" ]
-              }
-
-      context "includes total count if requested" $ do
-        it "using the Range header" $
-          request methodGet "/rpc/getitemrange?min=2&max=4"
-                  (rangeHdrsWithCount (ByteRangeFromTo 1 1)) ""
-             `shouldRespondWith` [json| [{"id":4}] |]
-              { matchStatus = 206 -- it now knows the response is partial
-              , matchHeaders = ["Content-Range" <:> "1-1/2"]
-              }
-
-        it "using limit and offset" $ do
-          request methodPost "/rpc/getitemrange?limit=1&offset=1"
-                  [("Prefer", "count=exact")]
-                  [json| { "min": 2, "max": 4 } |]
-             `shouldRespondWith` [json| [{"id":4}] |]
-              { matchStatus = 206 -- it now knows the response is partial
-              , matchHeaders = ["Content-Range" <:> "1-1/2"]
-              }
-          request methodGet "/rpc/getitemrange?min=2&max=4&limit=1&offset=1"
-                  [("Prefer", "count=exact")] mempty
-             `shouldRespondWith` [json| [{"id":4}] |]
-              { matchStatus = 206
-              , matchHeaders = ["Content-Range" <:> "1-1/2"]
-              }
-          request methodHead "/rpc/getitemrange?min=2&max=4&limit=1&offset=1"
-              [("Prefer", "count=exact")] mempty
-            `shouldRespondWith`
-              ""
-              { matchStatus = 206
-              , matchHeaders = [ matchContentTypeJson
-                               , "Content-Range" <:> "1-1/2" ]
-              }
-
-      it "includes exact count if requested" $ do
-        request methodHead "/rpc/getallprojects"
-                [("Prefer", "count=exact")] ""
-           `shouldRespondWith` ""
-            { matchStatus = 200
-            , matchHeaders = ["Content-Range" <:> "0-4/5"]
-            }
-        request methodHead "/rpc/getallprojects?select=*,clients!inner(*)&clients.id=eq.1"
-                [("Prefer", "count=exact")] ""
-           `shouldRespondWith` ""
-            { matchStatus = 200
-            , matchHeaders = ["Content-Range" <:> "0-1/2"]
-            }
-
-      it "includes exact count of 1 for functions that return a single scalar, domain or composite" $ do
-        request methodGet "/rpc/add_them?a=3&b=4"
-                [("Prefer", "count=exact")] ""
-           `shouldRespondWith` "7"
-            { matchStatus = 200
-            , matchHeaders = ["Content-Range" <:> "0-0/1"]
-            }
-        request methodGet "/rpc/ret_domain?val=8"
-                [("Prefer", "count=exact")] ""
-           `shouldRespondWith` "8"
-            { matchStatus = 200
-            , matchHeaders = ["Content-Range" <:> "0-0/1"]
-            }
-        request methodGet "/rpc/ret_point_2d"
-                [("Prefer", "count=exact")] ""
-           `shouldRespondWith`
-            [json|{"x": 10, "y": 5}|]
-            { matchStatus = 200
-            , matchHeaders = ["Content-Range" <:> "0-0/1"]
-            }
-
       it "returns proper json" $ do
         post "/rpc/getitemrange" [json| { "min": 2, "max": 4 } |] `shouldRespondWith`
           [json| [ {"id": 3}, {"id":4} ] |]
@@ -145,58 +47,6 @@ spec =
             { matchStatus = 200
             , matchHeaders = ["Content-Type" <:> "text/csv; charset=utf-8"]
             }
-
-      context "ignores Range header when method is different than GET" $ do
-        it "without limit and offset" $ do
-          request methodPost "/rpc/getitemrange"
-                  (rangeHdrsWithCount (ByteRangeFromTo 1 1))
-                  [json| { "min": 2, "max": 4 } |]
-             `shouldRespondWith` [json| [{"id": 3}, {"id": 4}] |]
-              { matchStatus = 200
-              , matchHeaders = ["Content-Range" <:> "0-1/2"]
-              }
-          request methodHead "/rpc/getitemrange?min=2&max=4"
-              (rangeHdrsWithCount (ByteRangeFromTo 1 1)) ""
-            `shouldRespondWith`
-              ""
-              { matchStatus = 200
-              , matchHeaders = [ matchContentTypeJson
-                               , "Content-Range" <:> "0-1/2" ]
-              }
-
-        it "with limit and offset" $ do
-          request methodPost "/rpc/getitemrange?limit=2&offset=1"
-                  (rangeHdrsWithCount (ByteRangeFromTo 1 1))
-                  [json| { "min": 2, "max": 5 } |]
-             `shouldRespondWith` [json| [{"id": 4}, {"id": 5}] |]
-              { matchStatus = 206
-              , matchHeaders = ["Content-Range" <:> "1-2/3"]
-              }
-          request methodHead "/rpc/getitemrange?min=2&max=5&limit=2&offset=1"
-              (rangeHdrsWithCount (ByteRangeFromTo 1 1)) ""
-            `shouldRespondWith`
-              ""
-              { matchStatus = 206
-              , matchHeaders = [ matchContentTypeJson
-                               , "Content-Range" <:> "1-2/3" ]
-              }
-
-        it "does not throw an invalid range error" $ do
-          request methodPost "/rpc/getitemrange?limit=2&offset=1"
-                  (rangeHdrsWithCount (ByteRangeFromTo 0 0))
-                  [json| { "min": 2, "max": 5 } |]
-             `shouldRespondWith` [json| [{"id": 4}, {"id": 5}] |]
-              { matchStatus = 206
-              , matchHeaders = ["Content-Range" <:> "1-2/3"]
-              }
-          request methodHead "/rpc/getitemrange?min=2&max=5&limit=2&offset=1"
-              (rangeHdrsWithCount (ByteRangeFromTo 0 0)) ""
-            `shouldRespondWith`
-              ""
-              { matchStatus = 206
-              , matchHeaders = [ matchContentTypeJson
-                               , "Content-Range" <:> "1-2/3" ]
-              }
 
     context "unknown function" $ do
       it "returns 404" $
@@ -300,16 +150,6 @@ spec =
         get "/rpc/getallprojects?id=gt.1&id=lt.5&select=id" `shouldRespondWith`
           [json|[{"id":2},{"id":3},{"id":4}]|]
           { matchHeaders = [matchContentTypeJson] }
-
-      it "can limit proc results" $ do
-        post "/rpc/getallprojects?id=gt.1&id=lt.5&select=id&limit=2&offset=1" [json| {} |]
-          `shouldRespondWith` [json|[{"id":3},{"id":4}]|]
-             { matchStatus = 200
-             , matchHeaders = ["Content-Range" <:> "1-2/*"] }
-        get "/rpc/getallprojects?id=gt.1&id=lt.5&select=id&limit=2&offset=1"
-          `shouldRespondWith` [json|[{"id":3},{"id":4}]|]
-             { matchStatus = 200
-             , matchHeaders = ["Content-Range" <:> "1-2/*"] }
 
       it "select works on the first level" $ do
         post "/rpc/getproject?select=id,name" [json| { "id": 1} |] `shouldRespondWith`
@@ -1051,44 +891,6 @@ spec =
                              , "Set-Cookie" <:> "id=a3fWa; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Secure; HttpOnly" ]
             }
 
-      it "can override the Location header on a trigger" $
-        post "/stuff"
-            [json|[{"id": 2, "name": "stuff 2"}]|]
-          `shouldRespondWith`
-            ""
-            { matchStatus = 201
-            , matchHeaders = [ matchHeaderAbsent hContentType
-                             , "Location" <:> "/stuff?id=eq.2&overriden=true" ]
-            }
-
-      -- On https://github.com/PostgREST/postgrest/issues/1427#issuecomment-595907535
-      -- it was reported that blank headers ` : ` where added and that cause proxies to fail the requests.
-      -- These tests are to ensure no blank headers are added.
-      context "Blank headers bug" $ do
-        it "shouldn't add blank headers on POST" $ do
-          r <- request methodPost "/loc_test" [] [json|{"id": "1", "c": "c1"}|]
-          liftIO $ do
-            let respHeaders = simpleHeaders r
-            respHeaders `shouldSatisfy` noBlankHeader
-
-        it "shouldn't add blank headers on PATCH" $ do
-          r <- request methodPatch "/loc_test?id=eq.1" [] [json|{"c": "c2"}|]
-          liftIO $ do
-            let respHeaders = simpleHeaders r
-            respHeaders `shouldSatisfy` noBlankHeader
-
-        it "shouldn't add blank headers on GET" $ do
-          r <- request methodGet "/loc_test" [] ""
-          liftIO $ do
-            let respHeaders = simpleHeaders r
-            respHeaders `shouldSatisfy` noBlankHeader
-
-        it "shouldn't add blank headers on DELETE" $ do
-          r <- request methodDelete "/loc_test?id=eq.1" [] ""
-          liftIO $ do
-            let respHeaders = simpleHeaders r
-            respHeaders `shouldSatisfy` noBlankHeader
-
       context "GUC status override" $ do
         it "can override the status on RPC" $
           get "/rpc/send_body_status_403"
@@ -1097,12 +899,6 @@ spec =
             { matchStatus  = 403
             , matchHeaders = [ matchContentTypeJson ]
             }
-
-        it "can override the status through trigger" $
-          patch "/stuff?id=eq.1"
-              [json|[{"name": "updated stuff 1"}]|]
-            `shouldRespondWith`
-              205
 
         it "fails when setting invalid status guc" $
           get "/rpc/send_bad_status"

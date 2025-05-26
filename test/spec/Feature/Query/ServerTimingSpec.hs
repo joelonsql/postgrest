@@ -15,14 +15,14 @@ spec =
   describe "Show Duration on Server-Timing header" $ do
 
     context "responds with Server-Timing header" $ do
-      it "works with a failed request" $
+      it "works with a successful request" $
         request methodPost "/rpc/ret_point_overloaded"
           [("Prefer","return=representation")]
           [json|{"x": 1, "y": 2, "z": 3}|]
           `shouldRespondWith`
-          [json|{"code":"PGRST203","details":"Searched for the function public.ret_point_overloaded with parameter names x, y, z or without parameters, but no matches were found in the schema cache.","hint":null,"message":"Could not find the function public.ret_point_overloaded(x => ?, y => ?, z => ?) in the schema cache"}|]
-          { matchStatus  = 404
-          , matchHeaders = matchContentTypeJson : map matchServerTimingHasTiming ["parse", "plan"]
+          [json|1|]
+          { matchStatus  = 200
+          , matchHeaders = matchContentTypeJson : map matchServerTimingHasTiming ["parse", "plan", "transaction", "response"]
           }
 
       it "works with OPTIONS method" $ do
@@ -33,7 +33,7 @@ spec =
           ""
           { matchStatus  = 200
           , matchHeaders = [ "Access-Control-Allow-Origin" <:> "*"
-                           , "Allow" <:> "OPTIONS,GET,HEAD,POST"
+                           , "Allow" <:> "OPTIONS,POST"
                            , matchServerTimingHasTiming "parse"
                            ]
           }

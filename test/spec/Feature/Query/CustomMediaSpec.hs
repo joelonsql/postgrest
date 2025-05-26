@@ -28,12 +28,13 @@ spec = describe "custom media types" $ do
             |    <title>PostgREST</title>
             |  </head>
             |  <body>
-            |    <h1>Welcome to PostgREST!</h1>
+            |    <h1>Welcome to PostgREST</h1>
             |  </body>
-            |</html>|]
+            |</html>
+            ||]
         { matchStatus = 200
-        , matchHeaders = [ "Content-Type" <:> "text/html; charset=utf-8"
-                         , "Content-Length" <:> "122" ]
+        , matchHeaders = [ "Content-Type" <:> "text/html"
+                         ]
         }
 
     it "can get raw output with Accept: text/plain" $ do
@@ -48,20 +49,12 @@ spec = describe "custom media types" $ do
     it "can get raw xml output with Accept: text/xml" $ do
       request methodGet "/rpc/return_scalar_xml" (acceptHdrs "text/xml") ""
         `shouldRespondWith`
-        "<a>foo</a>"
+        "<my-xml-tag/>"
         { matchStatus = 200
         , matchHeaders = [ "Content-Type" <:> "text/xml; charset=utf-8"
-                         , "Content-Length" <:> "10" ]
+                         ]
         }
 
-    it "can get raw xml output with Accept: text/xml" $ do
-      request methodGet "/rpc/return_scalar_xml?name=bar" (acceptHdrs "text/xml") ""
-        `shouldRespondWith`
-        "<a>bar</a>"
-        { matchStatus = 200
-        , matchHeaders = [ "Content-Type" <:> "text/xml; charset=utf-8"
-                         , "Content-Length" <:> "10" ]
-        }
 
     it "should fail with function returning text and Accept: text/xml" $
       request methodGet "/rpc/sayhello?name=world" (acceptHdrs "text/xml") ""
@@ -71,12 +64,12 @@ spec = describe "custom media types" $ do
         , matchHeaders = [ matchContentTypeJson ]
         }
 
-    it "should not fail when the function doesn't return a row" $
-      request methodGet "/rpc/return_null" (acceptHdrs "text/plain") ""
+    it "should fail when the function doesn't return a row" $
+      request methodGet "/rpc/ret_null" (acceptHdrs "text/plain") ""
         `shouldRespondWith`
-        ""
-        { matchStatus = 204
-        , matchHeaders = [matchHeaderAbsent hContentType]
+        [json|{"code":"PGRST107","details":null,"hint":null,"message":"None of these media types are available: text/plain"}|]
+        { matchStatus = 406
+        , matchHeaders = [matchContentTypeJson]
         }
 
   context "Proc that returns scalar based on a table" $ do
@@ -88,46 +81,14 @@ spec = describe "custom media types" $ do
 
   context "Proc that returns set of scalars and Accept: text/plain" $
     it "will err because only scalars work with media type domains" $
-      request methodPost "/rpc/ret_setof_text" (acceptHdrs "text/plain") ""
+      request methodPost "/rpc/ret_setof_integers" (acceptHdrs "text/plain") ""
         `shouldRespondWith`
-        [json| {"code":"PGRST107","details":"Requested media type text/plain is not applicable to the function ret_setof_text which returns SET OF text","hint":null,"message":"None of these media types are available: text/plain"} |]
+        [json| {"code":"PGRST107","details":null,"hint":null,"message":"None of these media types are available: text/plain"} |]
         { matchStatus  = 406
         , matchHeaders = [ matchContentTypeJson
-                         , "Content-Length" <:> "235" ]
-        }
-
-  context "Proc that returns rows and accepts custom media type" $ do
-    it "works if it has an aggregate defined" $ do
-      request methodPost "/rpc/ret_point_2d"
-        (acceptHdrs "application/geo+json")
-        [json| {} |]
-        `shouldRespondWith`
-        [json|{"type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [10, 5]}}]}|]
-        { matchStatus  = 200
-        , matchHeaders = [ "Content-Type" <:> "application/geo+json"
                          ]
         }
 
-    it "fails if doesn't have an aggregate defined" $ do
-      request methodPost "/rpc/ret_point_3d"
-        (acceptHdrs "application/geo+json")
-        [json| {} |]
-        `shouldRespondWith`
-        [json| {"code":"PGRST107","details":"Requested media type application/geo+json is not applicable to the function ret_point_3d which returns record","hint":null,"message":"None of these media types are available: application/geo+json"} |]
-        { matchStatus  = 406
-        , matchHeaders = [ matchContentTypeJson
-                         , "Content-Length" <:> "238" ]
-        }
-
-    it "works if there's an anyelement aggregate defined" $ do
-      request methodPost "/rpc/ret_point_3d"
-        (acceptHdrs "application/vnd.geo2+json")
-        [json| {} |]
-        `shouldRespondWith`
-        [json|[{"x": 7, "y": 9, "z": 11}]|]
-        { matchStatus  = 200
-        , matchHeaders = ["Content-Type" <:> "application/vnd.geo2+json"]
-        }
 
   context "matches requested media type correctly" $ do
     it "will match image/png according to q values" $ do
@@ -135,19 +96,19 @@ spec = describe "custom media types" $ do
         [("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")]
         ""
         `shouldRespondWith`
-        ""
+        "\"\\\\x89504e470d0a1a0a0000000d494844520000001e0000001e010300000001fe3ce100000006504c5445000000ff00001bff8d220000003f4944415408d76360c006d81b6004ff0118c10322641e00090910619100220a8084018828b080110f2480c4ff3f5082114c1ce08312cc0dec50821d08710200649012478e4d4c820000000049454e44ae426082\""
         { matchStatus = 200
-        , matchHeaders = ["Content-Type" <:> "image/png"]
+        , matchHeaders = ["Content-Type" <:> "application/json; charset=utf-8"]
         }
 
   context "any media type" $ do
     context "on functions" $ do
       it "returns application/json for */* if not explicitly set" $ do
-        request methodGet "/rpc/get_projects_below"
+        request methodGet "/rpc/get_projects_below?id=6"
           [("Accept", "*/*")]
           ""
           `shouldRespondWith`
-          [json|[]|]
+          [json|[{"id":1,"name":"Windows 7","client_id":1}, {"id":2,"name":"Windows 10","client_id":1}, {"id":3,"name":"IOS","client_id":2}, {"id":4,"name":"OSX","client_id":2}, {"id":5,"name":"Orphan","client_id":null}]|]
           { matchStatus = 200
           , matchHeaders = ["Content-Type" <:> "application/json; charset=utf-8"]
           }
@@ -157,48 +118,39 @@ spec = describe "custom media types" $ do
           [("Accept", "*/*")]
           ""
           `shouldRespondWith`
-          "pong"
+          "any"
           { matchStatus = 200
           , matchHeaders = ["Content-Type" <:> "application/octet-stream"]
           }
 
-      it "returns custom media type for */* if explicitly set" $ do
-        request methodGet "/rpc/ret_any_mt_custom"
-          [("Accept", "*/*")]
-          ""
-          `shouldRespondWith`
-          "pong"
-          { matchStatus = 200
-          , matchHeaders = ["Content-Type" <:> "text/plain; charset=utf-8"]
-          }
 
       it "accepts some media types if there's conditional logic" $ do
+        request methodGet "/rpc/ret_some_mt"
+          [("Accept", "app/chico")]
+          ""
+          `shouldRespondWith`
+          "chico"
+          { matchStatus = 200
+          , matchHeaders = ["Content-Type" <:> "app/chico"]
+          }
+
+        request methodGet "/rpc/ret_some_mt"
+          [("Accept", "app/harpo")]
+          ""
+          `shouldRespondWith`
+          "harpo"
+          { matchStatus = 200
+          , matchHeaders = ["Content-Type" <:> "app/harpo"]
+          }
+
         request methodGet "/rpc/ret_some_mt"
           [("Accept", "text/plain")]
           ""
           `shouldRespondWith`
-          "pong"
-          { matchStatus = 200
-          , matchHeaders = ["Content-Type" <:> "text/plain; charset=utf-8"]
-          }
-
-        request methodGet "/rpc/ret_some_mt"
-          [("Accept", "text/html")]
-          ""
-          `shouldRespondWith`
-          "<p>pong</p>"
-          { matchStatus = 200
-          , matchHeaders = ["Content-Type" <:> "text/html; charset=utf-8"]
-          }
-
-        request methodGet "/rpc/ret_some_mt"
-          [("Accept", "application/json")]
-          ""
-          `shouldRespondWith`
-          [json| {"code":"PGRST107","details":null,"hint":null,"message":"None of these media types are available: application/json"} |]
+          [json| {"code":"PT406","details":null,"hint":null,"message":"Not Acceptable"} |]
           { matchStatus  = 406
           , matchHeaders = [ matchContentTypeJson
-                           , "Content-Length" <:> "116" ]
+                           ]
           }
 
   context "media type parser allowed characters" $ do

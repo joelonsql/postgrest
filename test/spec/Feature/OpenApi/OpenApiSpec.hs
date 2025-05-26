@@ -28,10 +28,10 @@ spec = describe "OpenAPI" $ do
                          , matchHeaderAbsent hContentLength ]
         }
 
-  it "should respond to openapi request on none root path with 406" $
-    request methodGet "/items"
+  it "should respond to openapi request on rpc path with 404" $
+    request methodGet "/rpc/unknown"
             (acceptHdrs "application/openapi+json") ""
-      `shouldRespondWith` 406
+      `shouldRespondWith` 404
 
   it "should respond to openapi request with unsupported media type with 406" $
     request methodGet "/"

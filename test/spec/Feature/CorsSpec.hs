@@ -5,6 +5,7 @@ import Network.Wai (Application)
 import Network.HTTP.Types
 import Test.Hspec
 import Test.Hspec.Wai
+import Test.Hspec.Wai.JSON
 
 import Protolude
 
@@ -28,9 +29,9 @@ spec =
           }
 
     it "exposes necesssary response headers to regular request" $
-      request methodPost "/rpc/hello"
+      request methodPost "/rpc/sayhello"
           [("Origin", "http://example.com")]
-          ""
+          [json|{"name": "world"}|]
         `shouldRespondWith`
           ResponseMatcher
           { matchStatus = 200
@@ -41,7 +42,7 @@ spec =
           }
 
     it "allows INFO body through even with CORS request headers present to postflight request" $ do
-      request methodOptions "/rpc/hello"
+      request methodOptions "/rpc/getallusers"
           [ ("Host", "localhost:3000")
           , ("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:32.0) Gecko/20100101 Firefox/32.0")
           , ("Origin", "http://localhost:8000")
@@ -55,14 +56,14 @@ spec =
           ""
           { matchHeaders = [ "Access-Control-Allow-Origin" <:> "*" ] }
 
-      request methodOptions "/items"
+      request methodOptions "/rpc/getallusers"
           [ ("Accept", "application/json") ]
           ""
         `shouldRespondWith`
           ""
           { matchHeaders = [ "Access-Control-Allow-Origin" <:> "*" ] }
 
-      request methodOptions "/shops"
+      request methodOptions "/rpc/ret_point_2d"
           [ ("Accept", "application/geo+json") ]
           ""
         `shouldRespondWith`

@@ -19,7 +19,7 @@ spec =
           ""
           { matchHeaders = [ "X-Request-Id" <:> "1"] }
 
-      request methodHead "/projects"
+      request methodHead "/rpc/getallusers"
           [ ("X-Request-Id", "2") ]
           ""
         `shouldRespondWith`

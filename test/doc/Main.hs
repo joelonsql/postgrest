@@ -13,7 +13,6 @@ main =
     , "-XStandaloneDeriving"
     , "-XDuplicateRecordFields"
     , "-isrc"
-    , "src/PostgREST/ApiRequest/Preferences.hs"
     , "src/PostgREST/ApiRequest/QueryParams.hs"
     , "src/PostgREST/Config.hs"
     , "src/PostgREST/Error.hs"
